@@ -1470,3 +1470,292 @@ class ViLBERT(BaseModel):
             #       = output_dict.pop("next_sentence_loss")
 
         return output_dict
+
+
+class GatingNetwork(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        expert_count = 4 # it can be defiend in config
+        # TODO
+        # declare input dimension
+        input_dim = None
+        self.fc1 = nn.Linear(input_dim, expert_count)
+        self.softmax = nn.Softmax(dim=1)
+        
+    def forward(self, x):
+        x = self.fc1(x)
+        x = self.softmax(x)
+        return x
+
+
+class ViLBERTForClassificationExpert(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+
+        self.bert_expert = ViLBERTBase.from_pretrained(
+            self.config.bert_model_name,
+            config=BertConfig.from_dict(
+                OmegaConf.to_container(self.config, resolve=True)
+            ),
+            cache_dir=os.path.join(get_mmf_cache_dir(), "distributed_{}".format(-1)),
+        )
+
+        # Create a copy of config since struct mode won't allow direct overrides
+        # classifier_config is only needed for initializing the classifier
+        bert_config = deepcopy(config)
+        bert_config.hidden_size = config.bi_hidden_size
+        # TODO
+        # did you set bi_hidden_size in config file?
+        # do we need nlvr2 ?
+        if self.config.training_head_type == "nlvr2":
+            bert_config.hidden_size *= 2
+        self.bert_expert_pred_head = BertPredictionHeadTransform(bert_config)
+        self.init_weights()
+
+    def init_weights(self):
+        if self.config.random_initialize is False:
+            if self.config.bert_model_name is None:
+                # No pretrained model, init weights
+                self.bert_expert.init_weights()
+
+            # Classifier needs to be initialized always as it is task specific
+            # TODO
+            # this part is different. check it to be ok. I've commented the init because we don't have a classifier here
+            # the classifier has been converted to bert_expert_pred_head
+            # self.classifier.apply(self.bert._init_weights)
+
+    def forward(
+        self,
+        input_ids: Tensor,
+        image_feature: Tensor,
+        image_location: Tensor,
+        token_type_ids: Optional[Tensor] = None,
+        attention_mask: Optional[Tensor] = None,
+        image_attention_mask: Optional[Tensor] = None,
+        masked_lm_labels: Optional[Tensor] = None,
+        image_label: Optional[Tensor] = None,
+        image_target: Optional[Tensor] = None,
+        next_sentence_label: Optional[Tensor] = None,
+        output_all_attention_masks: bool = False,
+    ) -> Dict[str, Tensor]:
+        (
+            sequence_output_t,
+            sequence_output_v,
+            pooled_output_t,
+            pooled_output_v,
+            attention_weights,
+            _encoded_layers_t_output,
+            _encoded_layers_v_output,
+        ) = self.bert(
+            input_ids,
+            image_feature,
+            image_location,
+            token_type_ids,
+            attention_mask,
+            image_attention_mask,
+            output_all_encoded_layers=False,
+            output_all_attention_masks=output_all_attention_masks,
+        )
+
+        output = {}
+
+        if not torch.jit.is_scripting() and output_all_attention_masks:
+            output["attention_weights"] = attention_weights
+
+        if self.fusion_method == "sum":
+            pooled_output = self.dropout(pooled_output_t + pooled_output_v)
+        elif self.fusion_method == "mul":
+            pooled_output = self.dropout(pooled_output_t * pooled_output_v)
+        else:
+            raise AssertionError
+
+        if self.training_head_type == "nlvr2":
+            pooled_output = pooled_output.view(-1, pooled_output.size(1) * 2)
+
+
+        # logits = self.classifier(pooled_output)
+        # reshaped_logits = logits.contiguous().view(-1, self.num_labels)
+        # output["scores"] = reshaped_logits
+
+        # TODO
+        # I'm not sure whether the following part will work correctly or not
+        output_embeddings = self.bert_expert_pred_head(pooled_output)
+        reshaped_output_embeddings = output_embeddings.contiguous().view(-1, self.num_labels)
+
+        return output_embeddings
+
+
+
+@registry.register_model("moevilbert")
+class MoEViLBERT(BaseModel):
+    def __init__(self, config):
+        super().__init__(config)
+    
+    @classmethod
+    def config_path(cls):
+        return "configs/models/vilbert/pretrain.yaml"
+
+    # Backward compatibility
+    @classmethod
+    def format_state_key(cls, key):
+        return (
+            key.replace("bert.bert", "model.bert")
+            .replace("bert.cls", "model.cls")
+            .replace("bert.classifier", "model.classifier")
+        )
+
+    def build(self):
+        self.expert_1 = ViLBERTForClassificationExpert(self.config)
+        self.expert_2 = ViLBERTForClassificationExpert(self.config)
+        self.expert_3 = ViLBERTForClassificationExpert(self.config)
+        self.expert_4 = ViLBERTForClassificationExpert(self.config)
+        # TODO
+        # if you want to freeze base mode you can do something like this
+        # you'll need to apply to all experts
+        # if self.config.get("freeze_base", False):
+        #     for p in self.model.bert.parameters():
+        #         p.requires_grad = False
+
+        self.experts = nn.ModuleList([
+            expert_1,
+            expert_2,
+            expert_3,
+            expert_4
+        ])
+        self.gating = GatingNetwork(self.config)
+
+        
+
+        # if self.config.training_head_type == "pretraining":
+        #     self.model = ViLBERTForPretraining(self.config)
+        # else:
+        #     self.model = ViLBERTForClassification(self.config)
+
+        # if self.config.get("freeze_base", False):
+        #     for p in self.model.bert.parameters():
+        #         p.requires_grad = False
+    
+    def forward(self, sample_list):
+        expert_outputs = torch.stack([expert(x) for expert in self.experts], dim=1)
+
+        gating_weights = self.gating(x)
+        weighted_expert_outputs = expert_outputs * gating_weights.unsqueeze(2)
+        final_output = torch.sum(weighted_expert_outputs, dim=1)
+        return final_output
+
+
+    def forward(self, sample_list):
+        params = self.get_image_and_text_features(sample_list)
+        # pretraining labels
+        params["masked_lm_labels"] = getattr(sample_list, "lm_label_ids", None)
+        # is_random_next = getattr(sample_list, "is_correct", None)
+        # TODO(aps): Fix on dataset side
+        # params["is_random_next"] = None
+
+        # Prepare Mask
+        if params["image_feature"] is not None and params["image_dim"] is not None:
+            image_mask = torch.arange(
+                params["image_feature"].size(-2), device=params["image_feature"].device
+            ).expand(*params["image_feature"].size()[:-1])
+            if len(params["image_dim"].size()) < len(image_mask.size()):
+                params["image_dim"] = params["image_dim"].unsqueeze(-1)
+                assert len(params["image_dim"].size()) == len(image_mask.size())
+            image_mask = image_mask < params["image_dim"]
+            params["image_attention_mask"] = image_mask.long()
+        else:
+            params["image_attention_mask"] = None
+        params.pop("image_dim")
+
+        scores_expert_1 = self.expert_1(
+            params["input_ids"],
+            params["image_feature"],
+            params["image_location"],
+            params["token_type_ids"],
+            params["attention_mask"],
+            params["image_attention_mask"],
+            params["masked_lm_labels"],
+            params["image_label"],
+            params["image_target"],
+        )
+
+        scores_expert_2 = self.expert_2(
+            params["input_ids"],
+            params["image_feature"],
+            params["image_location"],
+            params["token_type_ids"],
+            params["attention_mask"],
+            params["image_attention_mask"],
+            params["masked_lm_labels"],
+            params["image_label"],
+            params["image_target"],
+        )
+
+        scores_expert_3 = self.expert_3(
+            params["input_ids"],
+            params["image_feature"],
+            params["image_location"],
+            params["token_type_ids"],
+            params["attention_mask"],
+            params["image_attention_mask"],
+            params["masked_lm_labels"],
+            params["image_label"],
+            params["image_target"],
+        )
+
+        scores_expert_4 = self.expert_4(
+            params["input_ids"],
+            params["image_feature"],
+            params["image_location"],
+            params["token_type_ids"],
+            params["attention_mask"],
+            params["image_attention_mask"],
+            params["masked_lm_labels"],
+            params["image_label"],
+            params["image_target"],
+        )
+
+
+        scores = torch.stack([
+            scores_expert_1,
+            scores_expert_2,
+            scores_expert_3,
+            scores_expert_4
+        ], dim=1)
+
+        gating_weights = self.gating(sample_list)
+        weighted_expert_outputs = scores * gating_weights.unsqueeze(2)
+        final_output = torch.sum(weighted_expert_outputs, dim=1)
+
+
+        self.classifiers = nn.ModuleDict()
+        # TODO
+        # consider these in config file
+        self.classifiers["vqa"] = nn.Linear(
+            config.hidden_size,
+            self.config.heads["vqa"]["num_labels"]
+        )
+
+        # visual entailment snli-ve
+        self.classifiers["ve"] = nn.Linear(
+            config.hidden_size,
+            self.config.heads["vqa"]["num_labels"]
+        )
+
+        # if self.config.training_head_type == "pretraining":
+        #     loss_key = "{}/{}".format(
+        #         sample_list.dataset_name, sample_list.dataset_type
+        #     )
+        #     output_dict["losses"] = {}
+        #     output_dict["losses"][loss_key + "/masked_lm_loss"] = output_dict.pop(
+        #         "masked_lm_loss"
+        #     )
+        #     output_dict["losses"][loss_key + "/masked_img_loss"] = output_dict.pop(
+        #         "masked_img_loss"
+        #     )
+        #     # if params["is_random_next"] is not None:
+        #     #     output_dict["losses"][loss_key + "/next_sentence_loss"]
+        #     #       = output_dict.pop("next_sentence_loss")
+
+        return scores
