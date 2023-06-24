@@ -1489,7 +1489,7 @@ class GatingNetwork(nn.Module):
         return x
 
 
-class ViLBERTForClassificationExpert(nn.Module):
+class ViLBERTExpert(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -1582,7 +1582,7 @@ class ViLBERTForClassificationExpert(nn.Module):
         # TODO
         # I'm not sure whether the following part will work correctly or not
         output_embeddings = self.bert_expert_pred_head(pooled_output)
-        reshaped_output_embeddings = output_embeddings.contiguous().view(-1, self.num_labels)
+        # reshaped_output_embeddings = output_embeddings.contiguous().view(-1, self.num_labels)
 
         return output_embeddings
 
@@ -1607,10 +1607,10 @@ class MoEViLBERT(BaseModel):
         )
 
     def build(self):
-        self.expert_1 = ViLBERTForClassificationExpert(self.config)
-        self.expert_2 = ViLBERTForClassificationExpert(self.config)
-        self.expert_3 = ViLBERTForClassificationExpert(self.config)
-        self.expert_4 = ViLBERTForClassificationExpert(self.config)
+        self.expert_1 = ViLBERTExpert(self.config)
+        self.expert_2 = ViLBERTExpert(self.config)
+        # self.expert_3 = ViLBERTExpert(self.config)
+        # self.expert_4 = ViLBERTExpert(self.config)
         # TODO
         # if you want to freeze base mode you can do something like this
         # you'll need to apply to all experts
@@ -1619,12 +1619,35 @@ class MoEViLBERT(BaseModel):
         #         p.requires_grad = False
 
         self.experts = nn.ModuleList([
-            expert_1,
-            expert_2,
-            expert_3,
-            expert_4
+            self.expert_1,
+            self.expert_2,
+            # self.expert_3,
+            # self.expert_4
         ])
         self.gating = GatingNetwork(self.config)
+
+        self.classifiers = nn.ModuleDict()
+        # TODO
+        # consider these in config file
+        self.classifiers["vqa2"] = nn.Linear(
+            self.config.hidden_size,
+            self.config.heads["vqa2"]["num_labels"]
+        )
+
+        # visual entailment snli-ve
+        self.classifiers["visual_entailment"] = nn.Linear(
+            self.config.hidden_size,
+            self.config.heads["visual_entailment"]["num_labels"]
+        )
+
+        self.loss_calculation_fn = {}
+        self.loss_calculation_fn["vqa2"] = self.classifier_loss_calculation
+        self.loss_calculation_fn["visual_entailment"] = self.classifier_loss_calculation
+
+        self.losses_dict = {
+            "vqa2": self.get_loss_fn(self.config.heads["vqa2"]["loss_type"]),
+            "visual_entailment": self.get_loss_fn(self.config.heads["visual_entailment"]["loss_type"])
+        }
 
         
 
@@ -1637,15 +1660,43 @@ class MoEViLBERT(BaseModel):
         #     for p in self.model.bert.parameters():
         #         p.requires_grad = False
     
-    def forward(self, sample_list):
-        expert_outputs = torch.stack([expert(x) for expert in self.experts], dim=1)
+    # def forward(self, sample_list):
+    #     expert_outputs = torch.stack([expert(x) for expert in self.experts], dim=1)
 
-        gating_weights = self.gating(x)
-        weighted_expert_outputs = expert_outputs * gating_weights.unsqueeze(2)
-        final_output = torch.sum(weighted_expert_outputs, dim=1)
-        return final_output
+    #     gating_weights = self.gating(x)
+    #     weighted_expert_outputs = expert_outputs * gating_weights.unsqueeze(2)
+    #     final_output = torch.sum(weighted_expert_outputs, dim=1)
+    #     return final_output
 
+    def classifier_loss_calculation(self, pooled_output, sample_list):
+        # TODO dataset name or task type masale in ast
+        logits = self.classifiers[sample_list.dataset_name](pooled_output)
+        # reshaped_logits = logits.contiguous().view(-1, self.num_labels)
+        num_labels = self.config.heads[sample_list.dataset_name]["num_labels"]
+        reshaped_logits = logits.contiguous().view(-1, num_labels)
+        scores = reshaped_logits
+        losses = {}
+        # TODO how should I handle the loss function
+        # if sample_list.dataset_type != "test":
+        #     loss_prefix = f"{sample_list.dataset_type}/{sample_list.dataset_name}/"
+        #     loss = self.losses_dict[sample_list.dataset_name](
+        #         scores, sample_list.targets
+        #     )
+        #     if sample_list.dataset_name == "vqa2":
+        #         loss *= sample_list.targets.size(1)
+        #     losses[loss_prefix + f"loss_{idx}"] = loss
+        output = {}
+        output["scores"] = scores
+        return output
 
+    def get_loss_fn(self, loss_type):
+        if loss_type == "binary_cross_entropy_with_logits":
+            return nn.functional.binary_cross_entropy_with_logits
+        elif loss_type == "cross_entropy":
+            return nn.functional.cross_entropy
+        else:
+            raise Exception(f"Unknown loss type: {loss_type}")
+        
     def forward(self, sample_list):
         params = self.get_image_and_text_features(sample_list)
         # pretraining labels
@@ -1668,7 +1719,7 @@ class MoEViLBERT(BaseModel):
             params["image_attention_mask"] = None
         params.pop("image_dim")
 
-        scores_expert_1 = self.expert_1(
+        output_expert_1 = self.expert_1(
             params["input_ids"],
             params["image_feature"],
             params["image_location"],
@@ -1680,7 +1731,7 @@ class MoEViLBERT(BaseModel):
             params["image_target"],
         )
 
-        scores_expert_2 = self.expert_2(
+        output_expert_2 = self.expert_2(
             params["input_ids"],
             params["image_feature"],
             params["image_location"],
@@ -1692,70 +1743,19 @@ class MoEViLBERT(BaseModel):
             params["image_target"],
         )
 
-        scores_expert_3 = self.expert_3(
-            params["input_ids"],
-            params["image_feature"],
-            params["image_location"],
-            params["token_type_ids"],
-            params["attention_mask"],
-            params["image_attention_mask"],
-            params["masked_lm_labels"],
-            params["image_label"],
-            params["image_target"],
-        )
+        # scores = torch.stack([
+        #     scores_expert_1,
+        #     scores_expert_2
+        # ], dim=1)
 
-        scores_expert_4 = self.expert_4(
-            params["input_ids"],
-            params["image_feature"],
-            params["image_location"],
-            params["token_type_ids"],
-            params["attention_mask"],
-            params["image_attention_mask"],
-            params["masked_lm_labels"],
-            params["image_label"],
-            params["image_target"],
-        )
+        # TODO Gating disabled temporarily
+        # gating_weights = self.gating(sample_list)
+        # weighted_expert_outputs = scores * gating_weights.unsqueeze(2)
+        # final_output = torch.sum(weighted_expert_outputs, dim=1)
+        weighted_expert_outputs = torch.div(torch.add(output_expert_1, output_expert_2), 2.0)
 
 
-        scores = torch.stack([
-            scores_expert_1,
-            scores_expert_2,
-            scores_expert_3,
-            scores_expert_4
-        ], dim=1)
-
-        gating_weights = self.gating(sample_list)
-        weighted_expert_outputs = scores * gating_weights.unsqueeze(2)
-        final_output = torch.sum(weighted_expert_outputs, dim=1)
 
 
-        self.classifiers = nn.ModuleDict()
-        # TODO
-        # consider these in config file
-        self.classifiers["vqa"] = nn.Linear(
-            config.hidden_size,
-            self.config.heads["vqa"]["num_labels"]
-        )
-
-        # visual entailment snli-ve
-        self.classifiers["ve"] = nn.Linear(
-            config.hidden_size,
-            self.config.heads["vqa"]["num_labels"]
-        )
-
-        # if self.config.training_head_type == "pretraining":
-        #     loss_key = "{}/{}".format(
-        #         sample_list.dataset_name, sample_list.dataset_type
-        #     )
-        #     output_dict["losses"] = {}
-        #     output_dict["losses"][loss_key + "/masked_lm_loss"] = output_dict.pop(
-        #         "masked_lm_loss"
-        #     )
-        #     output_dict["losses"][loss_key + "/masked_img_loss"] = output_dict.pop(
-        #         "masked_img_loss"
-        #     )
-        #     # if params["is_random_next"] is not None:
-        #     #     output_dict["losses"][loss_key + "/next_sentence_loss"]
-        #     #       = output_dict.pop("next_sentence_loss")
-
-        return scores
+        output = self.loss_calculation_fn[sample_list.data_set](weighted_expert_outputs, sample_list)
+        return output
