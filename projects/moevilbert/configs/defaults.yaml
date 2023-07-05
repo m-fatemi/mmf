@@ -1,0 +1,61 @@
+includes:
+- ./vqa2/train_val.yaml
+- ./visual_entailment/defaults.yaml
+
+model_config:
+  moevilbert:
+    training_head_type: classification
+    classifiers:
+      vqa2:
+        num_labels: 3129
+        losses:
+        - type: logit_bce
+      visual_entailment:
+        num_labels: 3
+        losses:
+        - type: cross_entropy
+
+optimizer:
+  type: adam_w
+  params:
+    lr: 5e-5
+    eps: 1e-8
+
+scheduler:
+  type: warmup_linear
+  params:
+    num_warmup_steps: 6000
+    num_training_steps: 60000
+
+evaluation:
+  metrics:
+  - type: vqa_accuracy
+    datasets:
+    - vqa2
+  - type: accuracy
+    key: accuracy
+    datasets:
+    - visual_entailment
+
+training:
+  batch_size: 480
+  lr_scheduler: true
+  # Don't forget to update schedule_attributes if you update this
+  max_updates: 60000
+  find_unused_parameters: true
+  early_stop:
+    enabled: false
+    criteria: vqa2/vqa_accuracy
+    minimize: false
+
+multitasking:
+  enabled: true
+  type: ratios
+  params:
+    sampling_ratios:
+      visual_entailment: 0.5
+      vqa2: 0.5
+
+checkpoint:
+  pretrained_state_mapping:
+    model.bert: model.bert
