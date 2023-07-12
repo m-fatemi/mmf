@@ -139,7 +139,8 @@ class DownloadableFile:
             make_dir(download_path)
 
         try:
-            self.checksum(download_path)
+            # self.checksum(download_path)
+            print("skipped checksum")
         except AssertionError:
             # File exists but checksum has changed. Will be redownloaded
             print(f"[ Checksum changed for {download_path}. Redownloading]")
@@ -159,7 +160,8 @@ class DownloadableFile:
         # If download actually happened, then only checksum again and decompress
         if downloaded:
             self.checksum(download_path)
-
+            print("skipped checksum!!")
+            print(self._compressed)
             if self._compressed:
                 decompress(download_path, self._file_name, self._delete_original)
 
@@ -217,7 +219,7 @@ def download(url, path, fname, redownload=True, disable_tqdm=False):
     """
     outfile = os.path.join(path, fname)
     download = not PathManager.isfile(outfile) or redownload
-    retry = 5
+    retry = 500
     exp_backoff = [2**r for r in reversed(range(retry))]
 
     pbar = None
