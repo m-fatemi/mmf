@@ -1493,14 +1493,18 @@ class ViLBERTExpert(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-
-        self.bert_expert = ViLBERTBase.from_pretrained(
+        self.bert = ViLBERTBase.from_pretrained(
             self.config.bert_model_name,
             config=BertConfig.from_dict(
                 OmegaConf.to_container(self.config, resolve=True)
             ),
             cache_dir=os.path.join(get_mmf_cache_dir(), "distributed_{}".format(-1)),
         )
+
+        self.training_head_type = self.config.training_head_type
+        # self.num_labels = self.config.num_labels
+        self.fusion_method = config.fusion_method
+        self.dropout = nn.Dropout(self.config.hidden_dropout_prob)
 
         # Create a copy of config since struct mode won't allow direct overrides
         # classifier_config is only needed for initializing the classifier
@@ -1511,20 +1515,21 @@ class ViLBERTExpert(nn.Module):
         # do we need nlvr2 ?
         if self.config.training_head_type == "nlvr2":
             bert_config.hidden_size *= 2
-        self.bert_expert_pred_head = BertPredictionHeadTransform(bert_config)
+        self.bert_pred_head = BertPredictionHeadTransform(bert_config)
         self.init_weights()
 
     def init_weights(self):
         if self.config.random_initialize is False:
             if self.config.bert_model_name is None:
                 # No pretrained model, init weights
-                self.bert_expert.init_weights()
+                self.bert.init_weights()
 
             # Classifier needs to be initialized always as it is task specific
             # TODO
             # this part is different. check it to be ok. I've commented the init because we don't have a classifier here
-            # the classifier has been converted to bert_expert_pred_head
+            # the classifier has been converted to bert_pred_head
             # self.classifier.apply(self.bert._init_weights)
+            self.bert_pred_head.apply(self.bert._init_weights)
 
     def forward(
         self,
@@ -1574,14 +1579,13 @@ class ViLBERTExpert(nn.Module):
         if self.training_head_type == "nlvr2":
             pooled_output = pooled_output.view(-1, pooled_output.size(1) * 2)
 
-
         # logits = self.classifier(pooled_output)
         # reshaped_logits = logits.contiguous().view(-1, self.num_labels)
         # output["scores"] = reshaped_logits
 
         # TODO
         # I'm not sure whether the following part will work correctly or not
-        output_embeddings = self.bert_expert_pred_head(pooled_output)
+        output_embeddings = self.bert_pred_head(pooled_output)
         # reshaped_output_embeddings = output_embeddings.contiguous().view(-1, self.num_labels)
 
         return output_embeddings
@@ -1595,7 +1599,7 @@ class MoEViLBERT(BaseModel):
     
     @classmethod
     def config_path(cls):
-        return "configs/models/vilbert/pretrain.yaml"
+        return "configs/models/moevilbert/pretrain.yaml"
 
     # Backward compatibility
     @classmethod
@@ -1608,65 +1612,109 @@ class MoEViLBERT(BaseModel):
 
     def build(self):
         self.expert_1 = ViLBERTExpert(self.config)
-        self.expert_2 = ViLBERTExpert(self.config)
+        # self.expert_2 = ViLBERTExpert(self.config)
         # self.expert_3 = ViLBERTExpert(self.config)
         # self.expert_4 = ViLBERTExpert(self.config)
         # TODO
         # if you want to freeze base mode you can do something like this
         # you'll need to apply to all experts
-        # if self.config.get("freeze_base", False):
-        #     for p in self.model.bert.parameters():
-        #         p.requires_grad = False
+        if self.config.get("freeze_base", False):
+            for p in self.expert_1.bert.parameters():
+                p.requires_grad = False
+            
+            # for p in self.expert_2.bert.parameters():
+            #     p.requires_grad = False
 
-        self.experts = nn.ModuleList([
-            self.expert_1,
-            self.expert_2,
-            # self.expert_3,
-            # self.expert_4
-        ])
+            # for p in self.expert_3.bert.parameters():
+            #     p.requires_grad = False
+
+        # self.experts = nn.ModuleList([
+        #     self.expert_1,
+        #     # self.expert_2,
+        #     # self.expert_3,
+        #     # self.expert_4
+        # ])
         # self.gating = GatingNetwork(self.config)
 
         self.classifiers = nn.ModuleDict()
         # TODO
         # consider these in config file
         self.classifiers["vqa2"] = nn.Linear(
-            self.config.hidden_size,
+            self.config.bi_hidden_size,
             self.config.classifiers["vqa2"]["num_labels"]
         )
 
         # visual entailment snli-ve
         self.classifiers["visual_entailment"] = nn.Linear(
-            self.config.hidden_size,
+            self.config.bi_hidden_size,
             self.config.classifiers["visual_entailment"]["num_labels"]
         )
 
-        # self.loss_calculation_fn = {}
-        # self.loss_calculation_fn["vqa2"] = self.classifier_loss_calculation
-        # self.loss_calculation_fn["visual_entailment"] = self.classifier_loss_calculation
+        # hateful_memes
+        self.classifiers["hateful_memes"] = nn.Linear(
+            self.config.bi_hidden_size,
+            self.config.classifiers["hateful_memes"]["num_labels"]
+        )
 
-        # self.losses_dict = {
-        #     "vqa2": self.get_loss_fn(self.config.classifiers["vqa2"]["loss_type"]),
-        #     "visual_entailment": self.get_loss_fn(self.config.classifiers["visual_entailment"]["loss_type"])
-        # }
+    def get_image_and_text_features(self, sample_list):
+        bert_input_ids = sample_list.input_ids
+        bert_input_mask = sample_list.input_mask
+        bert_input_type_ids = sample_list.segment_ids
 
-        
+        if sample_list.dataset_name == "nlvr2":
+            bert_input_ids = torch.cat([bert_input_ids, bert_input_ids])
+            bert_input_mask = torch.cat([bert_input_mask, bert_input_mask])
+            bert_input_type_ids = torch.cat([bert_input_type_ids, bert_input_type_ids])
 
-        # if self.config.training_head_type == "pretraining":
-        #     self.model = ViLBERTForPretraining(self.config)
-        # else:
-        #     self.model = ViLBERTForClassification(self.config)
+            # image input
+            img0 = getattr(sample_list, "img0", {})
+            image_info = getattr(img0, "image_info_0", {})
+            image_dim_variable_0 = getattr(image_info, "max_features", None)
+            image_feature_variable_0 = getattr(img0, "image_feature_0", None)
+            image_location_variable_0 = getattr(image_info, "bbox", None)
 
-        # if self.config.get("freeze_base", False):
-        #     for p in self.model.bert.parameters():
-        #         p.requires_grad = False
-    
-    # def forward(self, sample_list):
-    #     expert_outputs = torch.stack([expert(x) for expert in self.experts], dim=1)
+            img1 = getattr(sample_list, "img1", {})
+            image_info = getattr(img1, "image_info_0", {})
+            image_dim_variable_1 = getattr(image_info, "max_features", None)
+            image_feature_variable_1 = getattr(img1, "image_feature_0", None)
+            image_location_variable_1 = getattr(image_info, "bbox", None)
 
-    #     gating_weights = self.gating(x)
-    #     weighted_expert_outputs = expert_outputs * gating_weights.unsqueeze(2)
-    #     final_output = torch.sum(weighted_expert_outputs, dim=1)
-    #     return final_output
+            image_feature_variable = torch.cat(
+                [image_feature_variable_0, image_feature_variable_1]
+            )
+            image_location_variable = torch.cat(
+                [image_location_variable_0, image_location_variable_1]
+            )
+            image_dim_variable = torch.cat([image_dim_variable_0, image_dim_variable_1])
+            image_label_variable = None
+            image_target_variable = None
+        else:
+            image_info = getattr(sample_list, "image_info_0", {})
+            image_dim_variable = getattr(image_info, "max_features", None)
+            image_feature_variable = getattr(sample_list, "image_feature_0", None)
+            image_label_variable = getattr(sample_list, "image_labels", None)
+            image_location_variable = getattr(image_info, "bbox", None)
+
+            cls_prob = getattr(image_info, "cls_prob", None)
+            image_target = np.array(cls_prob, dtype=np.float32)
+            image_target_variable = torch.tensor(
+                image_target, dtype=torch.float, device=bert_input_ids.device
+            )
+
+        return {
+            "input_ids": bert_input_ids,
+            "attention_mask": bert_input_mask,
+            "token_type_ids": bert_input_type_ids,
+            "image_dim": image_dim_variable,
+            "image_feature": image_feature_variable,
+            "image_location": image_location_variable,
+            "image_target": image_target_variable,
+            "image_label": image_label_variable,
+        }
+
+    # def get_optimizer_parameters(self, config):
+    #     return get_optimizer_parameters_for_bert(self.expert_1, config)
+
 
     def classifier_loss_calculation(self, pooled_output, sample_list):
         # TODO dataset name or task type masale in ast
@@ -1685,6 +1733,9 @@ class MoEViLBERT(BaseModel):
                 loss = loss * targets.size(1)
                 losses[loss_prefix + "logit_bce"] = loss
             elif sample_list.dataset_name == "visual_entailment":
+                loss = nn.functional.cross_entropy(scores, sample_list.targets)
+                losses[loss_prefix + "cross_entropy"] = loss
+            elif sample_list.dataset_name == "hateful_memes":
                 loss = nn.functional.cross_entropy(scores, sample_list.targets)
                 losses[loss_prefix + "cross_entropy"] = loss
 
@@ -1736,17 +1787,29 @@ class MoEViLBERT(BaseModel):
             params["image_target"],
         )
 
-        output_expert_2 = self.expert_2(
-            params["input_ids"],
-            params["image_feature"],
-            params["image_location"],
-            params["token_type_ids"],
-            params["attention_mask"],
-            params["image_attention_mask"],
-            params["masked_lm_labels"],
-            params["image_label"],
-            params["image_target"],
-        )
+        # output_expert_2 = self.expert_2(
+        #     params["input_ids"],
+        #     params["image_feature"],
+        #     params["image_location"],
+        #     params["token_type_ids"],
+        #     params["attention_mask"],
+        #     params["image_attention_mask"],
+        #     params["masked_lm_labels"],
+        #     params["image_label"],
+        #     params["image_target"],
+        # )
+
+        # output_expert_3 = self.expert_3(
+        #     params["input_ids"],
+        #     params["image_feature"],
+        #     params["image_location"],
+        #     params["token_type_ids"],
+        #     params["attention_mask"],
+        #     params["image_attention_mask"],
+        #     params["masked_lm_labels"],
+        #     params["image_label"],
+        #     params["image_target"],
+        # )
 
         # scores = torch.stack([
         #     scores_expert_1,
@@ -1757,8 +1820,8 @@ class MoEViLBERT(BaseModel):
         # gating_weights = self.gating(sample_list)
         # weighted_expert_outputs = scores * gating_weights.unsqueeze(2)
         # final_output = torch.sum(weighted_expert_outputs, dim=1)
-        weighted_expert_outputs = torch.div(torch.add(output_expert_1, output_expert_2), 2.0)
-
+        # print(output_expert_1)
+        weighted_expert_outputs = torch.div(torch.add(torch.add(output_expert_1, output_expert_1), output_expert_1), 3.0)
 
         output = self.classifier_loss_calculation(weighted_expert_outputs, sample_list)
         return output

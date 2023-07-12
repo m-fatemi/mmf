@@ -7,7 +7,7 @@ model_config:
 
 dataset_config:
   visual_entailment:
-    return_features_info: true
+    return_features_info: false
     processors:
       text_processor:
         type: bert_tokenizer
@@ -42,7 +42,7 @@ evaluation:
   - accuracy
 
 training:
-  batch_size: 480
+  batch_size: 1
   lr_scheduler: true
   # Don't forget to update schedule_attributes if you update this
   max_updates: 60000

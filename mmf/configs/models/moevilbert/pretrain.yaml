@@ -1,2 +1,2 @@
 includes:
-- configs/models/vilbert/defaults.yaml
+  - configs/models/moevilbert/defaults.yaml

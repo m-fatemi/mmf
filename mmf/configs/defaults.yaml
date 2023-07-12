@@ -69,7 +69,7 @@ training:
 
     # Size of the batch globally. If distributed or data_parallel
     # is used, this will be divided equally among GPUs
-    batch_size: 512
+    batch_size: 32
     # Size of the batch per GPU. Use this if you want to specify batch size
     # per GPU instead of global batch size.
     # Mutually exclusive with training.batch_size.
@@ -79,7 +79,7 @@ training:
     # KxN (without incurring the memory overhead of setting batch_size to KxN).
     update_frequency: 1
     # Number of workers to be used in dataloaders
-    num_workers: 4
+    num_workers: 1
     # Some datasets allow fast reading by loading everything in the memory
     # Use this to enable it
     fast_read: false

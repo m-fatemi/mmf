@@ -1,10 +1,12 @@
 includes:
-- ./vqa2/train_val.yaml
-- ./visual_entailment/defaults.yaml
+  - ./hateful_memes/defaults.yaml
+  - ./visual_entailment/defaults.yaml
+  - ./vqa2/train_val.yaml
 
 model_config:
   moevilbert:
     training_head_type: classification
+    freeze_base: true
     classifiers:
       vqa2:
         num_labels: 3129
@@ -14,8 +16,13 @@ model_config:
         num_labels: 3
         losses:
         - type: cross_entropy
+      hateful_memes:
+        num_labels: 2
+        losses:
+        - type: cross_entropy
 
 optimizer:
+  # allow_unused_parameters: true
   type: adam_w
   params:
     lr: 5e-5
@@ -36,9 +43,10 @@ evaluation:
     key: accuracy
     datasets:
     - visual_entailment
+    - hateful_memes
 
 training:
-  batch_size: 480
+  batch_size: 2
   lr_scheduler: true
   # Don't forget to update schedule_attributes if you update this
   max_updates: 60000
@@ -53,8 +61,8 @@ multitasking:
   type: ratios
   params:
     sampling_ratios:
-      visual_entailment: 0.5
       vqa2: 0.5
+      hateful_memes: 0.5
 
 checkpoint:
   pretrained_state_mapping:

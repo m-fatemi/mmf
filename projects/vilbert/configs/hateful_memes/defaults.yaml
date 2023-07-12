@@ -47,7 +47,7 @@ evaluation:
   - roc_auc
 
 training:
-  batch_size: 32
+  batch_size: 8
   lr_scheduler: true
   max_updates: 22000
   find_unused_parameters: true
