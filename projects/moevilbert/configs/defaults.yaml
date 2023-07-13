@@ -46,7 +46,7 @@ evaluation:
     - hateful_memes
 
 training:
-  batch_size: 2
+  batch_size: 64
   lr_scheduler: true
   # Don't forget to update schedule_attributes if you update this
   max_updates: 60000
