@@ -1612,7 +1612,7 @@ class MoEViLBERT(BaseModel):
 
     def build(self):
         self.expert_1 = ViLBERTExpert(self.config)
-        # self.expert_2 = ViLBERTExpert(self.config)
+        self.expert_2 = ViLBERTExpert(self.config)
         # self.expert_3 = ViLBERTExpert(self.config)
         # self.expert_4 = ViLBERTExpert(self.config)
         # TODO
@@ -1622,8 +1622,8 @@ class MoEViLBERT(BaseModel):
             for p in self.expert_1.bert.parameters():
                 p.requires_grad = False
             
-            # for p in self.expert_2.bert.parameters():
-            #     p.requires_grad = False
+            for p in self.expert_2.bert.parameters():
+                p.requires_grad = False
 
             # for p in self.expert_3.bert.parameters():
             #     p.requires_grad = False
@@ -1787,17 +1787,17 @@ class MoEViLBERT(BaseModel):
             params["image_target"],
         )
 
-        # output_expert_2 = self.expert_2(
-        #     params["input_ids"],
-        #     params["image_feature"],
-        #     params["image_location"],
-        #     params["token_type_ids"],
-        #     params["attention_mask"],
-        #     params["image_attention_mask"],
-        #     params["masked_lm_labels"],
-        #     params["image_label"],
-        #     params["image_target"],
-        # )
+        output_expert_2 = self.expert_2(
+            params["input_ids"],
+            params["image_feature"],
+            params["image_location"],
+            params["token_type_ids"],
+            params["attention_mask"],
+            params["image_attention_mask"],
+            params["masked_lm_labels"],
+            params["image_label"],
+            params["image_target"],
+        )
 
         # output_expert_3 = self.expert_3(
         #     params["input_ids"],
@@ -1821,7 +1821,8 @@ class MoEViLBERT(BaseModel):
         # weighted_expert_outputs = scores * gating_weights.unsqueeze(2)
         # final_output = torch.sum(weighted_expert_outputs, dim=1)
         # print(output_expert_1)
-        weighted_expert_outputs = torch.div(torch.add(torch.add(output_expert_1, output_expert_1), output_expert_1), 3.0)
+        # weighted_expert_outputs = torch.div(torch.add(torch.add(output_expert_1, output_expert_1), output_expert_1), 3.0)
+        weighted_expert_outputs = torch.div(torch.add(output_expert_1, output_expert_2), 2.0)
 
         output = self.classifier_loss_calculation(weighted_expert_outputs, sample_list)
         return output

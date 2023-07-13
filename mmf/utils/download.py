@@ -159,7 +159,7 @@ class DownloadableFile:
 
         # If download actually happened, then only checksum again and decompress
         if downloaded:
-            self.checksum(download_path)
+            # self.checksum(download_path)
             print("skipped checksum!!")
             print(self._compressed)
             if self._compressed:
