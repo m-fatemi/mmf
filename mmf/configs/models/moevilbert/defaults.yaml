@@ -12,7 +12,7 @@ model_config:
     output_hidden_states: false
     text_only: false
     random_initialize: false
-    freeze_base: true
+    freeze_base: false
     finetune_lr_multiplier: 1
     attention_probs_dropout_prob: 0.1
     layer_norm_eps: 1e-12

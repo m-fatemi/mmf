@@ -1611,10 +1611,10 @@ class MoEViLBERT(BaseModel):
         )
 
     def build(self):
-        self.expert_1 = ViLBERTExpert(self.config)
-        self.expert_2 = ViLBERTExpert(self.config)
-        # self.expert_3 = ViLBERTExpert(self.config)
-        # self.expert_4 = ViLBERTExpert(self.config)
+        self.expert_1 = ViLBERTExpert(self.config, "vqa2")
+        self.expert_2 = ViLBERTExpert(self.config, "vis")
+        self.expert_3 = ViLBERTExpert(self.config)
+        self.expert_4 = ViLBERTExpert(self.config)
         # TODO
         # if you want to freeze base mode you can do something like this
         # you'll need to apply to all experts
@@ -1625,15 +1625,12 @@ class MoEViLBERT(BaseModel):
             for p in self.expert_2.bert.parameters():
                 p.requires_grad = False
 
-            # for p in self.expert_3.bert.parameters():
-            #     p.requires_grad = False
+            for p in self.expert_3.bert.parameters():
+                p.requires_grad = False
 
-        # self.experts = nn.ModuleList([
-        #     self.expert_1,
-        #     # self.expert_2,
-        #     # self.expert_3,
-        #     # self.expert_4
-        # ])
+            for p in self.expert_4.bert.parameters():
+                p.requires_grad = False
+
         # self.gating = GatingNetwork(self.config)
 
         self.classifiers = nn.ModuleDict()
@@ -1799,22 +1796,29 @@ class MoEViLBERT(BaseModel):
             params["image_target"],
         )
 
-        # output_expert_3 = self.expert_3(
-        #     params["input_ids"],
-        #     params["image_feature"],
-        #     params["image_location"],
-        #     params["token_type_ids"],
-        #     params["attention_mask"],
-        #     params["image_attention_mask"],
-        #     params["masked_lm_labels"],
-        #     params["image_label"],
-        #     params["image_target"],
-        # )
+        output_expert_3 = self.expert_3(
+            params["input_ids"],
+            params["image_feature"],
+            params["image_location"],
+            params["token_type_ids"],
+            params["attention_mask"],
+            params["image_attention_mask"],
+            params["masked_lm_labels"],
+            params["image_label"],
+            params["image_target"],
+        )
 
-        # scores = torch.stack([
-        #     scores_expert_1,
-        #     scores_expert_2
-        # ], dim=1)
+        output_expert_4 = self.expert_4(
+            params["input_ids"],
+            params["image_feature"],
+            params["image_location"],
+            params["token_type_ids"],
+            params["attention_mask"],
+            params["image_attention_mask"],
+            params["masked_lm_labels"],
+            params["image_label"],
+            params["image_target"],
+        )
 
         # TODO Gating disabled temporarily
         # gating_weights = self.gating(sample_list)
@@ -1822,7 +1826,7 @@ class MoEViLBERT(BaseModel):
         # final_output = torch.sum(weighted_expert_outputs, dim=1)
         # print(output_expert_1)
         # weighted_expert_outputs = torch.div(torch.add(torch.add(output_expert_1, output_expert_1), output_expert_1), 3.0)
-        weighted_expert_outputs = torch.div(torch.add(output_expert_1, output_expert_2), 2.0)
+        weighted_expert_outputs = torch.div(torch.add(output_expert_1, output_expert_2, output_expert_3, output_expert_4), 4.0)
 
         output = self.classifier_loss_calculation(weighted_expert_outputs, sample_list)
         return output
