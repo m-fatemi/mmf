@@ -7,6 +7,8 @@ model_config:
   moevilbert:
     training_head_type: classification
     freeze_base: true
+    freeze_gating_encoders: true
+    experts_count: 4
     classifiers:
       vqa2:
         num_labels: 3129
@@ -20,6 +22,21 @@ model_config:
         num_labels: 2
         losses:
         - type: cross_entropy
+    gating_image_encoder:
+      type: resnet152
+      params:
+        pretrained: true
+        pool_type: avg
+        num_output_features: 1
+    gating_text_encoder:
+      type: transformer
+      params:
+        bert_model_name: bert-base-uncased
+        hidden_size: 768
+        num_hidden_layers: 12
+        num_attention_heads: 12
+        output_attentions: false
+        output_hidden_states: false
 
 optimizer:
   # allow_unused_parameters: true
@@ -46,7 +63,7 @@ evaluation:
     - hateful_memes
 
 training:
-  batch_size: 128
+  batch_size: 2
   lr_scheduler: true
   # Don't forget to update schedule_attributes if you update this
   max_updates: 60000
@@ -61,8 +78,9 @@ multitasking:
   type: ratios
   params:
     sampling_ratios:
-      vqa2: 0.5
-      hateful_memes: 0.5
+      vqa2: 0.4
+      hateful_memes: 0.3
+      visual_entailment: 0.3
 
 checkpoint:
   pretrained_state_mapping:
