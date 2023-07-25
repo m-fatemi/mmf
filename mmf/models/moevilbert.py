@@ -1059,10 +1059,10 @@ class GatingNetwork(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.text_encoder = build_text_encoder(self.config.gating_text_encoder)
-        self.image_encoder = build_image_encoder(self.config.gating_image_encoder)
+        self.text_encoder = build_text_encoder(self.config.gating_network.text_encoder)
+        self.image_encoder = build_image_encoder(self.config.gating_network.image_encoder)
         
-        if self.config.get("freeze_gating_encoders", False):
+        if self.config.gating_network.get("freeze_encoders", False):
             for p in self.text_encoder.parameters():
                 p.requires_grad = False
             
@@ -1070,13 +1070,17 @@ class GatingNetwork(nn.Module):
                 p.requires_grad = False
         
         input_dim = 768 + 2048
-        self.fc1 = nn.Linear(input_dim, self.config.experts_count)
+        self.fc1 = nn.Linear(input_dim, len(self.config.experts.keys()))
         self.softmax = nn.Softmax(dim=1)
         
-    def forward(self, params):
+    def forward(
+            self,
+            input_ids: Tensor,
+            image_feature: Tensor
+        ):
         # Get the text and image features from the encoders
-        text_features = self.text_encoder(params["input_ids"])[1]
-        image_features = self.image_encoder("image_feature")
+        text_features = self.text_encoder(input_ids)[1]
+        image_features = self.image_encoder(image_feature)
 
         # Flatten the embeddings before concatenation
         image_features = torch.flatten(image_features, start_dim=1)
@@ -1212,34 +1216,32 @@ class MoEViLBERT(BaseModel):
 
     def build(self):
 
-        self.experts = nn.ModuleList([ViLBERTExpert(self.config) for _ in range(self.config.experts_count)])
+        self.experts = nn.ModuleList([
+            ViLBERTExpert(self.config.experts[expert_name]) for expert_name in self.config.experts.keys()
+        ])
 
-        if self.config.get("freeze_base", False):
-            for expert in self.experts:
+        for expert_name in self.config.experts.keys():
+            expert = ViLBERTExpert(self.config)
+            if self.config.experts[expert_name].get("freeze", False):
                 for p in expert.bert.parameters():
                     p.requires_grad = False
+            if self.config.experts[expert_name].get("checkpoint_fine_tuned"):
+                # initialize the expert with the checkpoint
+                # TODO
+                pass
+
+            self.experts.append(expert)
+
 
         self.gating = GatingNetwork(self.config)
 
+
         self.classifiers = nn.ModuleDict()
-        # TODO
-        # consider these in config file
-        self.classifiers["vqa2"] = nn.Linear(
-            self.config.bi_hidden_size,
-            self.config.classifiers["vqa2"]["num_labels"]
-        )
-
-        # visual entailment snli-ve
-        self.classifiers["visual_entailment"] = nn.Linear(
-            self.config.bi_hidden_size,
-            self.config.classifiers["visual_entailment"]["num_labels"]
-        )
-
-        # hateful_memes
-        self.classifiers["hateful_memes"] = nn.Linear(
-            self.config.bi_hidden_size,
-            self.config.classifiers["hateful_memes"]["num_labels"]
-        )
+        for expert_name in self.config.experts.keys():
+            self.classifiers[expert_name] = nn.Linear(
+                self.config.bi_hidden_size,
+                self.config.experts[expert_name].classifier.num_labels
+            )
 
     def get_image_and_text_features(self, sample_list):
         bert_input_ids = sample_list.input_ids
@@ -1303,27 +1305,24 @@ class MoEViLBERT(BaseModel):
 
     def classifier_loss_calculation(self, pooled_output, sample_list):
         # TODO dataset name or task type masale in ast
+        # dataset name is equal to expert_name
         logits = self.classifiers[sample_list.dataset_name](pooled_output)
         # reshaped_logits = logits.contiguous().view(-1, self.num_labels)
-        num_labels = self.config.classifiers[sample_list.dataset_name]["num_labels"]
+        num_labels = self.config.experts[sample_list.dataset_name].classifier.num_labels
         reshaped_logits = logits.contiguous().view(-1, num_labels)
         scores = reshaped_logits
         losses = {}
         # TODO how should I handle the loss function
         if sample_list.dataset_type != "test":
             loss_prefix = f"{sample_list.dataset_type}/{sample_list.dataset_name}/"
-            if sample_list.dataset_name == "vqa2":
+            if self.experts[sample_list.dataset_name ].classifier.loss == "logit_bce":
                 targets = sample_list["targets"]
                 loss = nn.functional.binary_cross_entropy_with_logits(scores, targets, reduction="mean")
                 loss = loss * targets.size(1)
                 losses[loss_prefix + "logit_bce"] = loss
-            elif sample_list.dataset_name == "visual_entailment":
+            elif self.experts[sample_list.dataset_name ].classifier.loss == "cross_entropy":
                 loss = nn.functional.cross_entropy(scores, sample_list.targets)
                 losses[loss_prefix + "cross_entropy"] = loss
-            elif sample_list.dataset_name == "hateful_memes":
-                loss = nn.functional.cross_entropy(scores, sample_list.targets)
-                losses[loss_prefix + "cross_entropy"] = loss
-
             
         output = {}
         output["scores"] = scores
@@ -1370,14 +1369,7 @@ class MoEViLBERT(BaseModel):
 
         gating_weights = self.gating(
             params["input_ids"],
-            params["image_feature"],
-            params["image_location"],
-            params["token_type_ids"],
-            params["attention_mask"],
-            params["image_attention_mask"],
-            params["masked_lm_labels"],
-            params["image_label"],
-            params["image_target"],
+            params["image_feature"]
         )
 
         weighted_sum_of_expert_outputs = torch.sum(expert_outputs * gating_weights.unsqueeze(2))

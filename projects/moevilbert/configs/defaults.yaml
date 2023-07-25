@@ -7,36 +7,47 @@ model_config:
   moevilbert:
     training_head_type: classification
     freeze_base: true
-    freeze_gating_encoders: true
+    freeze_gating_encoders: true 
     experts_count: 4
-    classifiers:
+    experts:
       vqa2:
-        num_labels: 3129
-        losses:
-        - type: logit_bce
+        classifier:
+          num_labels: 3129
+          loss: logit_bce
+        checkpoint_fine_tuned: vilbert.finetuned.vqa2.defaults
+        freeze: true
+      
       visual_entailment:
-        num_labels: 3
-        losses:
-        - type: cross_entropy
+        classifier:
+          num_labels: 3
+          loss: cross_entropy
+        checkpoint_fine_tuned: vilbert.finetuned.visual_entailment.defaults
+        freeze: true
+      
       hateful_memes:
-        num_labels: 2
-        losses:
-        - type: cross_entropy
-    gating_image_encoder:
-      type: resnet152
-      params:
-        pretrained: true
-        pool_type: avg
-        num_output_features: 1
-    gating_text_encoder:
-      type: transformer
-      params:
-        bert_model_name: bert-base-uncased
-        hidden_size: 768
-        num_hidden_layers: 12
-        num_attention_heads: 12
-        output_attentions: false
-        output_hidden_states: false
+        classifier:
+          num_labels: 2
+          loss: cross_entropy
+        checkpoint_fine_tuned: vilbert.finetuned.hateful_memes.defaults
+        freeze: true
+      
+    gating_network:
+      image_encoder:
+        type: resnet152
+        params:
+          pretrained: true
+          pool_type: avg
+          num_output_features: 1
+      text_encoder:
+        type: transformer
+        params:
+          bert_model_name: bert-base-uncased
+          hidden_size: 768
+          num_hidden_layers: 12
+          num_attention_heads: 12
+          output_attentions: false
+          output_hidden_states: false
+      freeze_encoders: true
 
 optimizer:
   # allow_unused_parameters: true
