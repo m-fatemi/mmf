@@ -1119,7 +1119,7 @@ class ViLBERTExpert(nn.Module):
         # do we need nlvr2 ?
         if self.config.training_head_type == "nlvr2":
             bert_config.hidden_size *= 2
-        self.bert_pred_head = BertPredictionHeadTransform(bert_config)
+        # self.bert_pred_head = BertPredictionHeadTransform(bert_config)
         self.init_weights()
 
     def init_weights(self):
@@ -1133,7 +1133,7 @@ class ViLBERTExpert(nn.Module):
             # this part is different. check it to be ok. I've commented the init because we don't have a classifier here
             # the classifier has been converted to bert_pred_head
             # self.classifier.apply(self.bert._init_weights)
-            self.bert_pred_head.apply(self.bert._init_weights)
+            # self.bert_pred_head.apply(self.bert._init_weights)
 
     def forward(
         self,
@@ -1189,10 +1189,10 @@ class ViLBERTExpert(nn.Module):
 
         # TODO
         # I'm not sure whether the following part will work correctly or not
-        output_embeddings = self.bert_pred_head(pooled_output)
+        # output_embeddings = self.bert_pred_head(pooled_output)
         # reshaped_output_embeddings = output_embeddings.contiguous().view(-1, self.num_labels)
 
-        return output_embeddings
+        return pooled_output
 
 
 
@@ -1216,32 +1216,60 @@ class MoEViLBERT(BaseModel):
 
     def build(self):
 
-        self.experts = nn.ModuleList([
-            ViLBERTExpert(self.config.experts[expert_name]) for expert_name in self.config.experts.keys()
-        ])
+        self.experts = nn.ModuleDict()
 
         for expert_name in self.config.experts.keys():
-            expert = ViLBERTExpert(self.config)
+            self.experts[expert_name] = ViLBERTExpert(self.config)
+            print("++++++++++++++++++++++++++++++++++++++++++++++++")
+            print("++++++++++++++++++++++++++++++++++++++++++++++++")
+            print("++++++++++++++++++++++++++++++++++++++++++++++++")
+            print(self.experts[expert_name].state_dict()['bert.embeddings.position_embeddings.weight'])
             if self.config.experts[expert_name].get("freeze", False):
-                for p in expert.bert.parameters():
+                for p in self.experts[expert_name].bert.parameters():
                     p.requires_grad = False
-            if self.config.experts[expert_name].get("checkpoint_fine_tuned"):
+            
+            expert_fine_tuned = self.config.experts[expert_name].get("checkpoint_fine_tuned")
+            if expert_fine_tuned:
                 # initialize the expert with the checkpoint
-                # TODO
-                pass
+                path = os.path.join(os.getenv("MMF_DATA_DIR"), "models", expert_fine_tuned)
+                print("------------------------------------------------")
+                print("------------------------------------------------")
+                print("------------------------------------------------")
+                print(path)
+                fine_tuned_model_state_dict = torch.load(path)
+                
+                # fix key names in checkpoint state dict
+                fine_tuned_model_state_dict_fixed = {}
+                for key_ in fine_tuned_model_state_dict.keys():
+                    if key_.startswith("model."):
+                        fine_tuned_model_state_dict_fixed[key_[6:]] = fine_tuned_model_state_dict[key_]
+                        
+                print(fine_tuned_model_state_dict_fixed['bert.embeddings.position_embeddings.weight'])
+                self.experts[expert_name].load_state_dict(fine_tuned_model_state_dict_fixed, strict=False)
+                print("************************************************")
+                print("************************************************")
+                print("************************************************")
+                print(self.experts[expert_name].state_dict()['bert.embeddings.position_embeddings.weight'])
 
-            self.experts.append(expert)
-
-
-        self.gating = GatingNetwork(self.config)
+        # self.gating = GatingNetwork(self.config)
 
 
         self.classifiers = nn.ModuleDict()
+        classifier_config = deepcopy(self.config)
+        classifier_config.hidden_size = self.config.bi_hidden_size
         for expert_name in self.config.experts.keys():
-            self.classifiers[expert_name] = nn.Linear(
-                self.config.bi_hidden_size,
-                self.config.experts[expert_name].classifier.num_labels
+            self.classifiers[expert_name] = nn.Sequential(
+                BertPredictionHeadTransform(classifier_config),
+                nn.Linear(
+                    classifier_config.hidden_size,
+                    self.config.experts[expert_name].classifier.num_labels
+                ),
             )
+            self.classifiers[expert_name].apply(self.experts[expert_name].bert._init_weights)
+            # self.classifiers[expert_name] = nn.Linear(
+            #     self.config.bi_hidden_size,
+            #     self.config.experts[expert_name].classifier.num_labels
+            # )
 
     def get_image_and_text_features(self, sample_list):
         bert_input_ids = sample_list.input_ids
@@ -1315,12 +1343,12 @@ class MoEViLBERT(BaseModel):
         # TODO how should I handle the loss function
         if sample_list.dataset_type != "test":
             loss_prefix = f"{sample_list.dataset_type}/{sample_list.dataset_name}/"
-            if self.experts[sample_list.dataset_name ].classifier.loss == "logit_bce":
+            if self.config.experts[sample_list.dataset_name].classifier.loss == "logit_bce":
                 targets = sample_list["targets"]
                 loss = nn.functional.binary_cross_entropy_with_logits(scores, targets, reduction="mean")
                 loss = loss * targets.size(1)
                 losses[loss_prefix + "logit_bce"] = loss
-            elif self.experts[sample_list.dataset_name ].classifier.loss == "cross_entropy":
+            elif self.config.experts[sample_list.dataset_name].classifier.loss == "cross_entropy":
                 loss = nn.functional.cross_entropy(scores, sample_list.targets)
                 losses[loss_prefix + "cross_entropy"] = loss
             
@@ -1330,7 +1358,10 @@ class MoEViLBERT(BaseModel):
         return output
         
     def forward(self, sample_list):
+        
         params = self.get_image_and_text_features(sample_list)
+        # params["error"]
+        
         # pretraining labels
         params["masked_lm_labels"] = getattr(sample_list, "lm_label_ids", None)
         # is_random_next = getattr(sample_list, "is_correct", None)
@@ -1353,7 +1384,7 @@ class MoEViLBERT(BaseModel):
 
 
         expert_outputs = torch.stack([
-            expert(
+            self.experts[expert_name](
                 params["input_ids"],
                 params["image_feature"],
                 params["image_location"],
@@ -1363,17 +1394,17 @@ class MoEViLBERT(BaseModel):
                 params["masked_lm_labels"],
                 params["image_label"],
                 params["image_target"],
-            ) for expert in self.experts
+            ) for expert_name in self.experts.keys()
             
         ], dim=1)
 
-        gating_weights = self.gating(
-            params["input_ids"],
-            params["image_feature"]
-        )
+        # gating_weights = self.gating(
+        #     params["input_ids"],
+        #     params["image_feature"]
+        # )
 
-        weighted_sum_of_expert_outputs = torch.sum(expert_outputs * gating_weights.unsqueeze(2))
-
-        output = self.classifier_loss_calculation(weighted_sum_of_expert_outputs, sample_list)
+        # weighted_sum_of_expert_outputs = torch.sum(expert_outputs * gating_weights.unsqueeze(2))
+        
+        output = self.classifier_loss_calculation(expert_outputs, sample_list)
         return output
     

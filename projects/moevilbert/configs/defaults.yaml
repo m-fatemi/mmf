@@ -14,22 +14,22 @@ model_config:
         classifier:
           num_labels: 3129
           loss: logit_bce
-        checkpoint_fine_tuned: vilbert.finetuned.vqa2.defaults
+        checkpoint_fine_tuned: vilbert.finetuned.vqa2.defaults/model.pth
         freeze: true
       
-      visual_entailment:
-        classifier:
-          num_labels: 3
-          loss: cross_entropy
-        checkpoint_fine_tuned: vilbert.finetuned.visual_entailment.defaults
-        freeze: true
+      # visual_entailment:
+      #   classifier:
+      #     num_labels: 3
+      #     loss: cross_entropy
+      #   checkpoint_fine_tuned: vilbert.finetuned.visual_entailment.defaults/model.pth
+      #   freeze: true
       
-      hateful_memes:
-        classifier:
-          num_labels: 2
-          loss: cross_entropy
-        checkpoint_fine_tuned: vilbert.finetuned.hateful_memes.defaults
-        freeze: true
+      # hateful_memes:
+      #   classifier:
+      #     num_labels: 2
+      #     loss: cross_entropy
+      #   checkpoint_fine_tuned: vilbert.finetuned.hateful_memes.defaults/model.pth
+      #   freeze: true
       
     gating_network:
       image_encoder:
