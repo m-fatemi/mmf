@@ -39,9 +39,9 @@ class HMConverter:
         phase_one = True
         for file in files_needed:
             try:
-                print(os.listdir(os.path.join(folder, "data")))
+                print(os.listdir(os.path.join(folder)))
                 assert PathManager.exists(
-                    os.path.join(folder, "data", file)
+                    os.path.join(folder, file)
                 ), f"{file} doesn't exist in {folder}"
             except AssertionError:
                 phase_one = False
@@ -50,7 +50,7 @@ class HMConverter:
             files_needed = self.JSONL_PHASE_TWO_FILES
             for file in files_needed:
                 assert PathManager.exists(
-                    os.path.join(folder, "data", file)
+                    os.path.join(folder, file)
                 ), f"{file} doesn't exist in {folder}"
         else:
             warnings.warn(
@@ -63,7 +63,7 @@ class HMConverter:
         exists = False
 
         for file in files_needed:
-            exists = exists or PathManager.exists(os.path.join(folder, "data", file))
+            exists = exists or PathManager.exists(os.path.join(folder, file))
 
         if not exists:
             raise AssertionError("Neither img or img.tar.gz exists in current zip")
@@ -128,16 +128,16 @@ class HMConverter:
         if move_dir:
             print(f"Moving {src}")
             print("Moving disabled")
-            # move(src, dest)
+            move(src, dest)
         else:
             print(f"Copying {src}")
-            # copy(src, dest)
+            copy(src, dest)
             print("Copying disabled")
 
         print(f"Unzipping {src}")
-        # self.decompress_zip(
-        #     dest, fname=os.path.basename(src), password=self.args.password
-        # )
+        self.decompress_zip(
+            dest, fname=os.path.basename(src), password=self.args.password
+        )
         print("decompress is disabled")
 
         phase_one = self.assert_files(images_path)
@@ -152,14 +152,14 @@ class HMConverter:
 
         for annotation in annotations:
             print(f"Moving {annotation}")
-            src = os.path.join(images_path, "data", annotation)
+            src = os.path.join(images_path, annotation)
             dest = os.path.join(annotations_path, annotation)
             move(src, dest)
 
         images = self.IMAGE_FILES
 
         for image_file in images:
-            src = os.path.join(images_path, "data", image_file)
+            src = os.path.join(images_path, image_file)
             if PathManager.exists(src):
                 print(f"Moving {image_file}")
             else:
