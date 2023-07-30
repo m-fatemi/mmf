@@ -39,6 +39,7 @@ class HMConverter:
         phase_one = True
         for file in files_needed:
             try:
+                print(os.listdir(os.path.join(folder, "data")))
                 assert PathManager.exists(
                     os.path.join(folder, "data", file)
                 ), f"{file} doesn't exist in {folder}"
@@ -80,7 +81,7 @@ class HMConverter:
         )
 
         parser.add_argument(
-            "--password", required=True, type=str, help="Password for the zip file"
+            "--password", required=False, type=str, help="Password for the zip file"
         )
         parser.add_argument(
             "--move", required=None, type=int, help="Move data dir to mmf cache dir"
@@ -126,15 +127,18 @@ class HMConverter:
         dest = images_path
         if move_dir:
             print(f"Moving {src}")
-            move(src, dest)
+            print("Moving disabled")
+            # move(src, dest)
         else:
             print(f"Copying {src}")
-            copy(src, dest)
+            # copy(src, dest)
+            print("Copying disabled")
 
         print(f"Unzipping {src}")
-        self.decompress_zip(
-            dest, fname=os.path.basename(src), password=self.args.password
-        )
+        # self.decompress_zip(
+        #     dest, fname=os.path.basename(src), password=self.args.password
+        # )
+        print("decompress is disabled")
 
         phase_one = self.assert_files(images_path)
 
