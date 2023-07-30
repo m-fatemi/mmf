@@ -3,6 +3,7 @@ dataset_config:
     # return_features_info: true
     use_images: false
     use_features: true
+    return_features_info: true
     processors:
       text_processor:
         type: bert_tokenizer
