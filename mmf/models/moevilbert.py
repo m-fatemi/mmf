@@ -1251,7 +1251,7 @@ class MoEViLBERT(BaseModel):
                 print("************************************************")
                 print(self.experts[expert_name].state_dict()['bert.embeddings.position_embeddings.weight'])
 
-        # self.gating = GatingNetwork(self.config)
+        self.gating = GatingNetwork(self.config)
 
 
         self.classifiers = nn.ModuleDict()
@@ -1360,7 +1360,6 @@ class MoEViLBERT(BaseModel):
     def forward(self, sample_list):
         
         params = self.get_image_and_text_features(sample_list)
-        # params["error"]
         
         # pretraining labels
         params["masked_lm_labels"] = getattr(sample_list, "lm_label_ids", None)
@@ -1398,13 +1397,13 @@ class MoEViLBERT(BaseModel):
             
         ], dim=1)
 
-        # gating_weights = self.gating(
-        #     params["input_ids"],
-        #     params["image_feature"]
-        # )
+        gating_weights = self.gating(
+            params["input_ids"],
+            params["image_feature"]
+        )
 
-        # weighted_sum_of_expert_outputs = torch.sum(expert_outputs * gating_weights.unsqueeze(2))
+        weighted_sum_of_expert_outputs = torch.sum(expert_outputs * gating_weights.unsqueeze(2))
         
-        output = self.classifier_loss_calculation(expert_outputs, sample_list)
+        output = self.classifier_loss_calculation(weighted_sum_of_expert_outputs, sample_list)
         return output
     

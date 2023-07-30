@@ -10,12 +10,12 @@ model_config:
     freeze_gating_encoders: true 
     experts_count: 4
     experts:
-      vqa2:
-        classifier:
-          num_labels: 3129
-          loss: logit_bce
-        checkpoint_fine_tuned: vilbert.finetuned.vqa2.defaults/model.pth
-        freeze: true
+      # vqa2:
+      #   classifier:
+      #     num_labels: 3129
+      #     loss: logit_bce
+      #   checkpoint_fine_tuned: vilbert.finetuned.vqa2.defaults/model.pth
+      #   freeze: true
       
       # visual_entailment:
       #   classifier:
@@ -24,12 +24,12 @@ model_config:
       #   checkpoint_fine_tuned: vilbert.finetuned.visual_entailment.defaults/model.pth
       #   freeze: true
       
-      # hateful_memes:
-      #   classifier:
-      #     num_labels: 2
-      #     loss: cross_entropy
-      #   checkpoint_fine_tuned: vilbert.finetuned.hateful_memes.defaults/model.pth
-      #   freeze: true
+      hateful_memes:
+        classifier:
+          num_labels: 2
+          loss: cross_entropy
+        checkpoint_fine_tuned: vilbert.finetuned.hateful_memes.defaults/model.pth
+        freeze: true
       
     gating_network:
       image_encoder:
@@ -74,7 +74,7 @@ evaluation:
     - hateful_memes
 
 training:
-  batch_size: 2
+  batch_size: 8
   lr_scheduler: true
   # Don't forget to update schedule_attributes if you update this
   max_updates: 60000
