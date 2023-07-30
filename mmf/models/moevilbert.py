@@ -11,7 +11,7 @@ import torch.nn.functional as F
 from mmf.common.registry import registry
 from mmf.models import BaseModel
 from mmf.modules.hf_layers import replace_with_jit
-from mmf.utils.configuration import get_mmf_cache_dir
+from mmf.utils.configuration import get_mmf_cache_dir, get_mmf_env
 from mmf.utils.modeling import get_optimizer_parameters_for_bert
 from omegaconf import OmegaConf
 from torch import nn, Tensor
@@ -1231,7 +1231,7 @@ class MoEViLBERT(BaseModel):
             expert_fine_tuned = self.config.experts[expert_name].get("checkpoint_fine_tuned")
             if expert_fine_tuned:
                 # initialize the expert with the checkpoint
-                path = os.path.join(os.getenv("MMF_DATA_DIR"), "models", expert_fine_tuned)
+                path = os.path.join(get_mmf_env("data_dir"), "models", expert_fine_tuned)
                 print("------------------------------------------------")
                 print("------------------------------------------------")
                 print("------------------------------------------------")
