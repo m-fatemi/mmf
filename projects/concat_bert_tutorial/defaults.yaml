@@ -29,7 +29,7 @@ evaluation:
     - roc_auc
 
 training:
-  batch_size: 2
+  batch_size: 32
   lr_scheduler: true
   max_updates: 22000
   early_stop:
