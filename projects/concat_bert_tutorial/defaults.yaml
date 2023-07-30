@@ -1,14 +1,9 @@
 includes:
   - configs/datasets/hateful_memes/bert.yaml
-  - configs/datasets/visual_entailment/defaults.yaml
 
 model_config:
   concat_bert_tutorial:
-    classifier_a:
-      type: mlp
-      params:
-        num_layers: 2
-    classifier_b:
+    classifier:
       type: mlp
       params:
         num_layers: 2
@@ -34,17 +29,9 @@ evaluation:
     - roc_auc
 
 training:
-  batch_size: 2
+  batch_size: 64
   lr_scheduler: true
   max_updates: 22000
   early_stop:
     criteria: hateful_memes/roc_auc
     minimize: false
-
-multitasking:
-  enabled: true
-  type: ratios
-  params:
-    sampling_ratios:
-      visual_entailment: 0.5
-      hateful_memes: 0.5

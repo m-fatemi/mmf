@@ -86,22 +86,15 @@ class ConcatBERTTutorial(BaseModel):
             # Number of MLP layers in the classifier
             num_layers: 2
         """
-        self.classifier_a = build_classifier_layer(self.config.classifier_a)
-        self.classifier_b = build_classifier_layer(self.config.classifier_b)
- 
+        self.classifier = build_classifier_layer(self.config.classifier)
+
     # Each model in MMF gets a dict called sample_list which contains
     # all of the necessary information returned from the image
     def forward(self, sample_list):
         # Text input features will be in "input_ids" key
-        if sample_list.dataset_name == "hateful_memes":
-            text = sample_list["input_ids"]
-            image = sample_list["image"]
-        elif sample_list.dataset_name == "visual_entailment":
-            text = sample_list["text"]
-            image = sample_list["image_feature_0"]
-        
+        text = sample_list["input_ids"]
         # Similarly, image input will be in "image" key
-        
+        image = sample_list["image"]
 
         # Get the text and image features from the encoders
         text_features = self.language_module(text)[1]
@@ -113,12 +106,9 @@ class ConcatBERTTutorial(BaseModel):
 
         # Concatenate the features returned from two modality encoders
         combined = torch.cat([text_features, image_features], dim=1)
-        print(sample_list)
+
         # Pass final tensor to classifier to get scores
-        if sample_list.dataset_name == "hateful_memes":
-            logits = self.classifier_a(combined)
-        elif sample_list.dataset_name == "visual_entailment":
-            logits = self.classifier_b(combined)
+        logits = self.classifier(combined)
 
         # For loss calculations (automatically done by MMF
         # as per the loss defined in the config),
