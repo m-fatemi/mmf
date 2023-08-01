@@ -17,19 +17,19 @@ model_config:
       #   checkpoint_fine_tuned: vilbert.finetuned.vqa2.defaults/model.pth
       #   freeze: true
       
-      # visual_entailment:
-      #   classifier:
-      #     num_labels: 3
-      #     loss: cross_entropy
-      #   checkpoint_fine_tuned: vilbert.finetuned.visual_entailment.defaults/model.pth
-      #   freeze: true
-      
-      hateful_memes:
+      visual_entailment:
         classifier:
-          num_labels: 2
+          num_labels: 3
           loss: cross_entropy
-        checkpoint_fine_tuned: vilbert.finetuned.hateful_memes.defaults/model.pth
+        checkpoint_fine_tuned: vilbert.finetuned.visual_entailment.defaults/model.pth
         freeze: true
+      
+      # hateful_memes:
+      #   classifier:
+      #     num_labels: 2
+      #     loss: cross_entropy
+      #   checkpoint_fine_tuned: vilbert.finetuned.hateful_memes.defaults/model.pth
+      #   freeze: true
       
     gating_network:
       image_encoder:
