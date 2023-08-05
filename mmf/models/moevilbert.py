@@ -1378,7 +1378,7 @@ class MoEViLBERT(BaseModel):
         return output
         
     def forward(self, sample_list):
-        
+        print(sample_list.keys())
         params = self.get_image_and_text_features(sample_list)
         # params["error"]
         
