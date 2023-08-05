@@ -1428,7 +1428,8 @@ class MoEViLBERT(BaseModel):
 
         for ex in expert_outputs:
             print('ex["text_embeddings"].size()')
-            print(ex["text_embeddings"][0:].size())
+            print((ex["text_embeddings"][0]).size())
+            print((ex["text_embeddings"][1]).size())
             print(torch.flatten(ex["image_embeddings"], start_dim=1).size())
 
         # gating_weights = self.gating(
