@@ -11,7 +11,7 @@ import torch.nn.functional as F
 from mmf.common.registry import registry
 from mmf.models import BaseModel
 from mmf.modules.hf_layers import replace_with_jit
-from mmf.utils.configuration import get_mmf_cache_dir, get_mmf_env
+from mmf.utils.configuration import get_mmf_cache_dir
 from mmf.utils.modeling import get_optimizer_parameters_for_bert
 from omegaconf import OmegaConf
 from torch import nn, Tensor
@@ -958,6 +958,8 @@ class ViLBERTBase(BertPreTrainedModel):
         Optional[Tuple[List[Tensor], List[Tensor], List[Tuple[Tensor, Tensor]]]],
         Optional[List[Tensor]],
         Optional[List[Tensor]],
+        Optional[Tensor],
+        Optional[Tensor]
     ]:
         if attention_mask is None:
             attention_mask = torch.ones_like(input_txt)
@@ -1053,6 +1055,8 @@ class ViLBERTBase(BertPreTrainedModel):
             all_attention_mask_output,
             encoded_layers_t_output,
             encoded_layers_v_output,
+            embedding_output,
+            v_embedding_output
         )
 
 class GatingNetwork(nn.Module):
@@ -1078,13 +1082,23 @@ class GatingNetwork(nn.Module):
             input_ids: Tensor,
             image_feature: Tensor
         ):
+        print("input_ids.size()")
+        print(input_ids.size())
+        print("image_feature.size()")
+        print(image_feature.size())
         # Get the text and image features from the encoders
         text_features = self.text_encoder(input_ids)[1]
+        print("text_features.size()")
+        print(text_features.size())
         image_features = self.image_encoder(image_feature)
+        print("image_features.size()")
+        print(image_features.size())
 
         # Flatten the embeddings before concatenation
         image_features = torch.flatten(image_features, start_dim=1)
+        print(image_features.size())
         text_features = torch.flatten(text_features, start_dim=1)
+        print(text_features.size())
         # Concatenate the features returned from two modality encoders
         combined = torch.cat([text_features, image_features], dim=1)
 
@@ -1157,6 +1171,8 @@ class ViLBERTExpert(nn.Module):
             attention_weights,
             _encoded_layers_t_output,
             _encoded_layers_v_output,
+            text_embeddings,
+            image_embeddings
         ) = self.bert(
             input_ids,
             image_feature,
@@ -1192,7 +1208,11 @@ class ViLBERTExpert(nn.Module):
         # output_embeddings = self.bert_pred_head(pooled_output)
         # reshaped_output_embeddings = output_embeddings.contiguous().view(-1, self.num_labels)
 
-        return pooled_output
+        return {
+            "pooled_output": pooled_output,
+            "text_embeddings": text_embeddings,
+            "image_embeddings": image_embeddings
+        }
 
 
 
@@ -1231,7 +1251,7 @@ class MoEViLBERT(BaseModel):
             expert_fine_tuned = self.config.experts[expert_name].get("checkpoint_fine_tuned")
             if expert_fine_tuned:
                 # initialize the expert with the checkpoint
-                path = os.path.join(get_mmf_env("data_dir"), "models", expert_fine_tuned)
+                path = os.path.join(os.getenv("MMF_DATA_DIR"), "models", expert_fine_tuned)
                 print("------------------------------------------------")
                 print("------------------------------------------------")
                 print("------------------------------------------------")
@@ -1251,7 +1271,7 @@ class MoEViLBERT(BaseModel):
                 print("************************************************")
                 print(self.experts[expert_name].state_dict()['bert.embeddings.position_embeddings.weight'])
 
-        self.gating = GatingNetwork(self.config)
+        # self.gating = GatingNetwork(self.config)
 
 
         self.classifiers = nn.ModuleDict()
@@ -1360,12 +1380,15 @@ class MoEViLBERT(BaseModel):
     def forward(self, sample_list):
         
         params = self.get_image_and_text_features(sample_list)
+        # params["error"]
         
         # pretraining labels
         params["masked_lm_labels"] = getattr(sample_list, "lm_label_ids", None)
         # is_random_next = getattr(sample_list, "is_correct", None)
         # TODO(aps): Fix on dataset side
         # params["is_random_next"] = None
+
+        
 
         # Prepare Mask
         if params["image_feature"] is not None and params["image_dim"] is not None:
@@ -1381,8 +1404,8 @@ class MoEViLBERT(BaseModel):
             params["image_attention_mask"] = None
         params.pop("image_dim")
 
-
-        expert_outputs = torch.stack([
+        
+        expert_outputs = [
             self.experts[expert_name](
                 params["input_ids"],
                 params["image_feature"],
@@ -1394,16 +1417,26 @@ class MoEViLBERT(BaseModel):
                 params["image_label"],
                 params["image_target"],
             ) for expert_name in self.experts.keys()
-            
+        ]
+        # pooled_output
+        # text_embeddings
+        # image_embeddings
+        expert_pooled_outputs = torch.stack([
+            expert_output["pooled_output"]
+            for expert_output in expert_outputs
         ], dim=1)
 
-        gating_weights = self.gating(
-            params["input_ids"],
-            params["image_feature"]
-        )
+        for ex in expert_outputs:
+            print('ex["text_embeddings"].size()')
+            print(ex["text_embeddings"].size())
+            print(ex["image_embeddings"].size())
 
-        weighted_sum_of_expert_outputs = torch.sum(expert_outputs * gating_weights.unsqueeze(2))
+        # gating_weights = self.gating(
+        #     sample_list["input_ids"],
+        #     sample_list["image_feature_0"]
+        # )
+        # weighted_sum_of_expert_outputs = torch.sum(expert_pooled_outputs * gating_weights.unsqueeze(2))
         
-        output = self.classifier_loss_calculation(weighted_sum_of_expert_outputs, sample_list)
+        output = self.classifier_loss_calculation(expert_pooled_outputs, sample_list)
         return output
     
