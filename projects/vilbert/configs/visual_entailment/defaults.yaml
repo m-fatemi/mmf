@@ -7,6 +7,7 @@ model_config:
 
 dataset_config:
   visual_entailment:
+    use_images: true
     return_features_info: true
     processors:
       text_processor:
