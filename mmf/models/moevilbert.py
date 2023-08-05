@@ -1404,7 +1404,8 @@ class MoEViLBERT(BaseModel):
             params["image_attention_mask"] = None
         params.pop("image_dim")
 
-        
+        print(f'image feature size: {params["image_feature"].size()}')
+        print(arams["image_feature"])
         expert_outputs = [
             self.experts[expert_name](
                 params["input_ids"],
