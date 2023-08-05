@@ -1421,6 +1421,7 @@ class ViLBERT(BaseModel):
         return get_optimizer_parameters_for_bert(self.model, config)
 
     def forward(self, sample_list):
+        print(sample_list.keys())
         params = self.get_image_and_text_features(sample_list)
         # pretraining labels
         params["masked_lm_labels"] = getattr(sample_list, "lm_label_ids", None)
