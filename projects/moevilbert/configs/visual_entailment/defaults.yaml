@@ -1,7 +1,5 @@
 dataset_config:
   visual_entailment:
-    use_images: true
-    use_features: true
     return_features_info: true
     processors:
       text_processor:
