@@ -1079,28 +1079,19 @@ class GatingNetwork(nn.Module):
         
     def forward(
             self,
-            input_ids: Tensor,
-            image_feature: Tensor
+            txt_input_ids: Tensor,
+            image_features: Tensor
         ):
-        print("input_ids.size()")
-        print(input_ids.size())
-        print("image_feature.size()")
-        print(image_feature.size())
-        # Get the text and image features from the encoders
-        text_features = self.text_encoder(input_ids)[1]
-        print("text_features.size()")
-        print(text_features.size())
-        image_features = torch.mean(image_feature, dim=1)
-        print("image_features.size()")
-        print(image_features.size())
-
+        
+        text_features = self.text_encoder(txt_input_ids)[1]
+        image_features_regions_avg = torch.mean(image_features, dim=1)
+        
         # Flatten the embeddings before concatenation
-        image_features = torch.flatten(image_features, start_dim=1)
-        print(image_features.size())
+
+        image_features_regions_avg = torch.flatten(image_features_regions_avg, start_dim=1)        
         text_features = torch.flatten(text_features, start_dim=1)
-        print(text_features.size())
         # Concatenate the features returned from two modality encoders
-        combined = torch.cat([text_features, image_features], dim=1)
+        combined = torch.cat([text_features, image_features_regions_avg], dim=1)
 
         scores = self.fc1(combined)
         probes = self.softmax(scores)
