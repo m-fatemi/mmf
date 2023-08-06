@@ -957,9 +957,7 @@ class ViLBERTBase(BertPreTrainedModel):
         Tensor,
         Optional[Tuple[List[Tensor], List[Tensor], List[Tuple[Tensor, Tensor]]]],
         Optional[List[Tensor]],
-        Optional[List[Tensor]],
-        Optional[Tensor],
-        Optional[Tensor]
+        Optional[List[Tensor]]
     ]:
         if attention_mask is None:
             attention_mask = torch.ones_like(input_txt)
@@ -1054,9 +1052,7 @@ class ViLBERTBase(BertPreTrainedModel):
             pooled_output_v,
             all_attention_mask_output,
             encoded_layers_t_output,
-            encoded_layers_v_output,
-            embedding_output,
-            v_embedding_output
+            encoded_layers_v_output
         )
 
 class GatingNetwork(nn.Module):
@@ -1161,9 +1157,7 @@ class ViLBERTExpert(nn.Module):
             pooled_output_v,
             attention_weights,
             _encoded_layers_t_output,
-            _encoded_layers_v_output,
-            text_embeddings,
-            image_embeddings
+            _encoded_layers_v_output
         ) = self.bert(
             input_ids,
             image_feature,
@@ -1198,12 +1192,12 @@ class ViLBERTExpert(nn.Module):
         # I'm not sure whether the following part will work correctly or not
         # output_embeddings = self.bert_pred_head(pooled_output)
         # reshaped_output_embeddings = output_embeddings.contiguous().view(-1, self.num_labels)
-
-        return {
-            "pooled_output": pooled_output,
-            "text_embeddings": text_embeddings,
-            "image_embeddings": image_embeddings
-        }
+        return pooled_output
+        # return {
+        #     "pooled_output": pooled_output,
+        #     "text_embeddings": text_embeddings,
+        #     "image_embeddings": image_embeddings
+        # }
 
 
 
@@ -1414,22 +1408,16 @@ class MoEViLBERT(BaseModel):
         # text_embeddings
         # image_embeddings
         expert_pooled_outputs = torch.stack([
-            expert_output["pooled_output"]
+            expert_output
             for expert_output in expert_outputs
         ], dim=1)
-
-        for ex in expert_outputs:
-            print('ex["text_embeddings"].size()')
-            print((ex["text_embeddings"][0]).size())
-            print((ex["text_embeddings"][1]).size())
-            print(torch.flatten(ex["image_embeddings"], start_dim=1).size())
 
         gating_weights = self.gating(
             sample_list["input_ids"],
             sample_list["image_feature_0"]
         )
         weighted_sum_of_expert_outputs = torch.sum(expert_pooled_outputs * gating_weights.unsqueeze(2))
-        
-        output = self.classifier_loss_calculation(weighted_sum_of_expert_outputs, sample_list)
+        print(f"weighted_sum_of_expert_outputs: {weighted_sum_of_expert_outputs.size()}")
+        output = self.classifier_loss_calculation(expert_pooled_outputs, sample_list)
         return output
     
