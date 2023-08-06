@@ -1064,16 +1064,16 @@ class GatingNetwork(nn.Module):
         super().__init__()
         self.config = config
         self.text_encoder = build_text_encoder(self.config.gating_network.text_encoder)
-        self.image_encoder = build_image_encoder(self.config.gating_network.image_encoder)
+        # self.image_encoder = build_image_encoder(self.config.gating_network.image_encoder)
         
         if self.config.gating_network.get("freeze_encoders", False):
             for p in self.text_encoder.parameters():
                 p.requires_grad = False
             
-            for p in self.image_encoder.parameters():
-                p.requires_grad = False
+            # for p in self.image_encoder.parameters():
+                # p.requires_grad = False
         
-        input_dim = 768 + 2048
+        input_dim = 768 + 1024
         self.fc1 = nn.Linear(input_dim, len(self.config.experts.keys()))
         self.softmax = nn.Softmax(dim=1)
         
@@ -1090,7 +1090,7 @@ class GatingNetwork(nn.Module):
         text_features = self.text_encoder(input_ids)[1]
         print("text_features.size()")
         print(text_features.size())
-        image_features = self.image_encoder(image_feature)
+        image_features = torch.mean(image_feature, dim=1)
         print("image_features.size()")
         print(image_features.size())
 
@@ -1271,7 +1271,7 @@ class MoEViLBERT(BaseModel):
                 print("************************************************")
                 print(self.experts[expert_name].state_dict()['bert.embeddings.position_embeddings.weight'])
 
-        # self.gating = GatingNetwork(self.config)
+        self.gating = GatingNetwork(self.config)
 
 
         self.classifiers = nn.ModuleDict()
@@ -1433,12 +1433,12 @@ class MoEViLBERT(BaseModel):
             print((ex["text_embeddings"][1]).size())
             print(torch.flatten(ex["image_embeddings"], start_dim=1).size())
 
-        # gating_weights = self.gating(
-        #     sample_list["input_ids"],
-        #     sample_list["image_feature_0"]
-        # )
-        # weighted_sum_of_expert_outputs = torch.sum(expert_pooled_outputs * gating_weights.unsqueeze(2))
+        gating_weights = self.gating(
+            sample_list["input_ids"],
+            sample_list["image_feature_0"]
+        )
+        weighted_sum_of_expert_outputs = torch.sum(expert_pooled_outputs * gating_weights.unsqueeze(2))
         
-        output = self.classifier_loss_calculation(expert_pooled_outputs, sample_list)
+        output = self.classifier_loss_calculation(weighted_sum_of_expert_outputs, sample_list)
         return output
     
