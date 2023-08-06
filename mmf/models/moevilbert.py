@@ -1091,6 +1091,7 @@ class GatingNetwork(nn.Module):
 
         scores = self.fc1(combined)
         probes = self.softmax(scores)
+        print(f"probes.size(): {probes.size()}")
         return probes
 
 
@@ -1226,9 +1227,6 @@ class MoEViLBERT(BaseModel):
         for expert_name in self.config.experts.keys():
             self.experts[expert_name] = ViLBERTExpert(self.config)
             print("++++++++++++++++++++++++++++++++++++++++++++++++")
-            print("++++++++++++++++++++++++++++++++++++++++++++++++")
-            print("++++++++++++++++++++++++++++++++++++++++++++++++")
-            print(self.experts[expert_name].state_dict()['bert.embeddings.position_embeddings.weight'])
             if self.config.experts[expert_name].get("freeze", False):
                 for p in self.experts[expert_name].bert.parameters():
                     p.requires_grad = False
@@ -1237,8 +1235,6 @@ class MoEViLBERT(BaseModel):
             if expert_fine_tuned:
                 # initialize the expert with the checkpoint
                 path = os.path.join(get_mmf_env("data_dir"), "models", expert_fine_tuned)
-                print("------------------------------------------------")
-                print("------------------------------------------------")
                 print("------------------------------------------------")
                 print(path)
                 fine_tuned_model_state_dict = torch.load(path)
@@ -1252,9 +1248,6 @@ class MoEViLBERT(BaseModel):
                 print(fine_tuned_model_state_dict_fixed['bert.embeddings.position_embeddings.weight'])
                 self.experts[expert_name].load_state_dict(fine_tuned_model_state_dict_fixed, strict=False)
                 print("************************************************")
-                print("************************************************")
-                print("************************************************")
-                print(self.experts[expert_name].state_dict()['bert.embeddings.position_embeddings.weight'])
 
         self.gating = GatingNetwork(self.config)
 
@@ -1389,8 +1382,6 @@ class MoEViLBERT(BaseModel):
             params["image_attention_mask"] = None
         params.pop("image_dim")
 
-        print(f'image feature size: {params["image_feature"].size()}')
-        print(params["image_feature"])
         expert_outputs = [
             self.experts[expert_name](
                 params["input_ids"],
@@ -1416,6 +1407,7 @@ class MoEViLBERT(BaseModel):
             sample_list["input_ids"],
             sample_list["image_feature_0"]
         )
+        print(f"gating_weights.size(): {gating_weights.size()}")
         weighted_sum_of_expert_outputs = torch.sum(expert_pooled_outputs * gating_weights.unsqueeze(2))
         print(f"weighted_sum_of_expert_outputs: {weighted_sum_of_expert_outputs.size()}")
         output = self.classifier_loss_calculation(expert_pooled_outputs, sample_list)
