@@ -1073,7 +1073,7 @@ class GatingNetwork(nn.Module):
             # for p in self.image_encoder.parameters():
                 # p.requires_grad = False
         
-        input_dim = 768 + 1024
+        input_dim = 768 + 2048
         self.fc1 = nn.Linear(input_dim, len(self.config.experts.keys()))
         self.softmax = nn.Softmax(dim=1)
         
