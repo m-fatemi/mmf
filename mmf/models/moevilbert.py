@@ -1184,8 +1184,6 @@ class ViLBERTExpert(nn.Module):
 
         if self.training_head_type == "nlvr2":
             pooled_output = pooled_output.view(-1, pooled_output.size(1) * 2)
-        else:
-            pooled_output = pooled_output.view(-1, 1024)
 
         # logits = self.classifier(pooled_output)
         # reshaped_logits = logits.contiguous().view(-1, self.num_labels)
