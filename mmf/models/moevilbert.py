@@ -1382,7 +1382,7 @@ class MoEViLBERT(BaseModel):
             params["image_attention_mask"] = None
         params.pop("image_dim")
 
-        expert_outputs = [
+        expert_outputs = torch.stack([
             self.experts[expert_name](
                 params["input_ids"],
                 params["image_feature"],
@@ -1394,22 +1394,24 @@ class MoEViLBERT(BaseModel):
                 params["image_label"],
                 params["image_target"],
             ) for expert_name in self.experts.keys()
-        ]
+        ], dim=1)
+
+        print(f"expert ouputs: {expert_outputs.size()}")
         # pooled_output
         # text_embeddings
         # image_embeddings
-        expert_pooled_outputs = torch.stack([
-            expert_output
-            for expert_output in expert_outputs
-        ], dim=1)
+        # expert_pooled_outputs = torch.stack([
+        #     expert_output
+        #     for expert_output in expert_outputs
+        # ], dim=1)
 
         gating_weights = self.gating(
             sample_list["input_ids"],
             sample_list["image_feature_0"]
         )
         print(f"gating_weights.size(): {gating_weights.size()}")
-        weighted_sum_of_expert_outputs = torch.sum(expert_pooled_outputs * gating_weights.unsqueeze(2))
+        weighted_sum_of_expert_outputs = torch.sum(expert_outputs * gating_weights.unsqueeze(2))
         print(f"weighted_sum_of_expert_outputs: {weighted_sum_of_expert_outputs.size()}")
-        output = self.classifier_loss_calculation(expert_pooled_outputs, sample_list)
+        output = self.classifier_loss_calculation(expert_outputs, sample_list)
         return output
     
