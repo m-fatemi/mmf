@@ -1184,6 +1184,8 @@ class ViLBERTExpert(nn.Module):
 
         if self.training_head_type == "nlvr2":
             pooled_output = pooled_output.view(-1, pooled_output.size(1) * 2)
+        else:
+            pooled_output = pooled_output.view(-1, 1024)
 
         # logits = self.classifier(pooled_output)
         # reshaped_logits = logits.contiguous().view(-1, self.num_labels)
@@ -1193,6 +1195,8 @@ class ViLBERTExpert(nn.Module):
         # I'm not sure whether the following part will work correctly or not
         # output_embeddings = self.bert_pred_head(pooled_output)
         # reshaped_output_embeddings = output_embeddings.contiguous().view(-1, self.num_labels)
+        print("pooled_output.shape")
+        print(pooled_output.shape)
         return pooled_output
         # return {
         #     "pooled_output": pooled_output,
@@ -1356,7 +1360,6 @@ class MoEViLBERT(BaseModel):
         return output
         
     def forward(self, sample_list):
-        print(sample_list.keys())
         params = self.get_image_and_text_features(sample_list)
         # params["error"]
         
@@ -1409,9 +1412,11 @@ class MoEViLBERT(BaseModel):
             sample_list["input_ids"],
             sample_list["image_feature_0"]
         )
+        
         print(f"gating_weights.size(): {gating_weights.size()}")
+        print(gating_weights)
         weighted_sum_of_expert_outputs = torch.sum(expert_outputs * gating_weights.unsqueeze(2))
         print(f"weighted_sum_of_expert_outputs: {weighted_sum_of_expert_outputs.size()}")
-        output = self.classifier_loss_calculation(expert_outputs, sample_list)
+        output = self.classifier_loss_calculation(weighted_sum_of_expert_outputs, sample_list)
         return output
     
