@@ -1091,7 +1091,6 @@ class GatingNetwork(nn.Module):
 
         scores = self.fc1(combined)
         probes = self.softmax(scores)
-        print(f"probes.size(): {probes.size()}")
         return probes
 
 
@@ -1193,8 +1192,6 @@ class ViLBERTExpert(nn.Module):
         # I'm not sure whether the following part will work correctly or not
         # output_embeddings = self.bert_pred_head(pooled_output)
         # reshaped_output_embeddings = output_embeddings.contiguous().view(-1, self.num_labels)
-        print("pooled_output.shape")
-        print(pooled_output.shape)
         return pooled_output
         # return {
         #     "pooled_output": pooled_output,
@@ -1228,7 +1225,6 @@ class MoEViLBERT(BaseModel):
 
         for expert_name in self.config.experts.keys():
             self.experts[expert_name] = ViLBERTExpert(self.config)
-            print("++++++++++++++++++++++++++++++++++++++++++++++++")
             if self.config.experts[expert_name].get("freeze", False):
                 for p in self.experts[expert_name].bert.parameters():
                     p.requires_grad = False
@@ -1237,8 +1233,7 @@ class MoEViLBERT(BaseModel):
             if expert_fine_tuned:
                 # initialize the expert with the checkpoint
                 path = os.path.join(get_mmf_env("data_dir"), "models", expert_fine_tuned)
-                print("------------------------------------------------")
-                print(path)
+                print(f"initializing expert {expert_name} from: {path}")
                 fine_tuned_model_state_dict = torch.load(path)
                 
                 # fix key names in checkpoint state dict
@@ -1247,9 +1242,7 @@ class MoEViLBERT(BaseModel):
                     if key_.startswith("model."):
                         fine_tuned_model_state_dict_fixed[key_[6:]] = fine_tuned_model_state_dict[key_]
                         
-                print(fine_tuned_model_state_dict_fixed['bert.embeddings.position_embeddings.weight'])
                 self.experts[expert_name].load_state_dict(fine_tuned_model_state_dict_fixed, strict=False)
-                print("************************************************")
 
         self.gating = GatingNetwork(self.config)
 
@@ -1397,24 +1390,12 @@ class MoEViLBERT(BaseModel):
             ) for expert_name in self.experts.keys()
         ], dim=1)
 
-        print(f"expert ouputs: {expert_outputs.size()}")
-        # pooled_output
-        # text_embeddings
-        # image_embeddings
-        # expert_pooled_outputs = torch.stack([
-        #     expert_output
-        #     for expert_output in expert_outputs
-        # ], dim=1)
-
         gating_weights = self.gating(
             sample_list["input_ids"],
             sample_list["image_feature_0"]
         )
         
-        print(f"gating_weights.size(): {gating_weights.size()}")
-        print(gating_weights)
         weighted_sum_of_expert_outputs = torch.sum(expert_outputs * gating_weights.unsqueeze(2), dim=1)
-        print(f"weighted_sum_of_expert_outputs: {weighted_sum_of_expert_outputs.size()}")
         output = self.classifier_loss_calculation(weighted_sum_of_expert_outputs, sample_list)
         return output
     
