@@ -1415,7 +1415,7 @@ class MoEViLBERT(BaseModel):
         
         print(f"gating_weights.size(): {gating_weights.size()}")
         print(gating_weights)
-        weighted_sum_of_expert_outputs = torch.sum(expert_outputs * gating_weights.unsqueeze(2))
+        weighted_sum_of_expert_outputs = torch.sum(expert_outputs * gating_weights.unsqueeze(2), dim=1)
         print(f"weighted_sum_of_expert_outputs: {weighted_sum_of_expert_outputs.size()}")
         output = self.classifier_loss_calculation(weighted_sum_of_expert_outputs, sample_list)
         return output
