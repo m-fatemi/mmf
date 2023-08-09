@@ -2,6 +2,7 @@ includes:
   - ./hateful_memes/defaults.yaml
   - ./visual_entailment/defaults.yaml
   - ./vqa2/train_val.yaml
+  - ./vizwiz/defaults.yaml
 
 model_config:
   moevilbert:
@@ -22,6 +23,12 @@ model_config:
           num_labels: 3
           loss: cross_entropy
         checkpoint_fine_tuned: vilbert.finetuned.visual_entailment.defaults/model.pth
+        freeze: true
+      vizwiz:
+        classifier:
+          num_labels: 7371
+          loss: logit_bce
+        checkpoint_fine_tuned: vilbert.finetuned.vizwiz.defaults/model.pth
         freeze: true
       
       # hateful_memes:
@@ -67,6 +74,7 @@ evaluation:
   - type: vqa_accuracy
     datasets:
     - vqa2
+    - vizwiz
   - type: accuracy
     key: accuracy
     datasets:
@@ -74,14 +82,14 @@ evaluation:
     - hateful_memes
 
 training:
-  batch_size: 128
+  batch_size: 32
   lr_scheduler: true
   # Don't forget to update schedule_attributes if you update this
   max_updates: 60000
   find_unused_parameters: true
   early_stop:
     enabled: false
-    criteria: vqa2/vqa_accuracy
+    criteria: vizwiz/vqa_accuracy
     minimize: false
 
 multitasking:
@@ -89,9 +97,10 @@ multitasking:
   type: ratios
   params:
     sampling_ratios:
-      vqa2: 0.4
-      hateful_memes: 0.3
-      visual_entailment: 0.3
+      vqa2: 0.25
+      hateful_memes: 0.25
+      visual_entailment: 0.25
+      vizwiz: 0.25
 
 checkpoint:
   pretrained_state_mapping:
