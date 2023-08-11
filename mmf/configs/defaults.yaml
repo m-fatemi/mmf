@@ -79,7 +79,7 @@ training:
     # KxN (without incurring the memory overhead of setting batch_size to KxN).
     update_frequency: 1
     # Number of workers to be used in dataloaders
-    num_workers: 1
+    num_workers: 2
     # Some datasets allow fast reading by loading everything in the memory
     # Use this to enable it
     fast_read: false
