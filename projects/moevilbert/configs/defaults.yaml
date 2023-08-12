@@ -17,12 +17,12 @@ model_config:
       #   checkpoint_fine_tuned: vilbert.finetuned.vqa2.defaults/model.pth
       #   freeze: true
       
-      # visual_entailment:
-      #   classifier:
-      #     num_labels: 3
-      #     loss: cross_entropy
-      #   checkpoint_fine_tuned: vilbert.finetuned.visual_entailment.defaults/model.pth
-      #   freeze: true
+      visual_entailment:
+        classifier:
+          num_labels: 3
+          loss: cross_entropy
+        checkpoint_fine_tuned: vilbert.finetuned.visual_entailment.defaults/model.pth
+        freeze: true
       # vizwiz:
       #   classifier:
       #     num_labels: 7371
