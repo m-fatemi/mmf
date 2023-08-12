@@ -96,10 +96,10 @@ multitasking:
   type: ratios
   params:
     sampling_ratios:
-      vqa2: 0.25
-      hateful_memes: 0.25
-      visual_entailment: 0.25
-      vizwiz: 0.25
+      # vqa2: 0.25
+      hateful_memes: 0.5
+      visual_entailment: 0.5
+      # vizwiz: 0.25
 
 checkpoint:
   pretrained_state_mapping:
