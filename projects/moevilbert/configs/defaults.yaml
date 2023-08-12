@@ -9,7 +9,6 @@ model_config:
     training_head_type: classification
     freeze_base: true
     freeze_gating_encoders: true 
-    experts_count: 4
     experts:
       # vqa2:
       #   classifier:
@@ -18,25 +17,25 @@ model_config:
       #   checkpoint_fine_tuned: vilbert.finetuned.vqa2.defaults/model.pth
       #   freeze: true
       
-      visual_entailment:
-        classifier:
-          num_labels: 3
-          loss: cross_entropy
-        checkpoint_fine_tuned: vilbert.finetuned.visual_entailment.defaults/model.pth
-        freeze: true
-      vizwiz:
-        classifier:
-          num_labels: 7371
-          loss: logit_bce
-        checkpoint_fine_tuned: vilbert.finetuned.vizwiz.defaults/model.pth
-        freeze: true
-      
-      # hateful_memes:
+      # visual_entailment:
       #   classifier:
-      #     num_labels: 2
+      #     num_labels: 3
       #     loss: cross_entropy
-      #   checkpoint_fine_tuned: vilbert.finetuned.hateful_memes.defaults/model.pth
+      #   checkpoint_fine_tuned: vilbert.finetuned.visual_entailment.defaults/model.pth
       #   freeze: true
+      # vizwiz:
+      #   classifier:
+      #     num_labels: 7371
+      #     loss: logit_bce
+      #   checkpoint_fine_tuned: vilbert.finetuned.vizwiz.defaults/model.pth
+      #   freeze: true
+      
+      hateful_memes:
+        classifier:
+          num_labels: 2
+          loss: cross_entropy
+        checkpoint_fine_tuned: vilbert.finetuned.hateful_memes.defaults/model.pth
+        freeze: true
       
     gating_network:
       image_encoder:
@@ -89,7 +88,7 @@ training:
   find_unused_parameters: true
   early_stop:
     enabled: false
-    criteria: vizwiz/vqa_accuracy
+    criteria: hateful_memes/accuracy
     minimize: false
 
 multitasking:
@@ -97,10 +96,10 @@ multitasking:
   type: ratios
   params:
     sampling_ratios:
-      # vqa2: 0.25
-      # hateful_memes: 0.25
-      visual_entailment: 0.4
-      vizwiz: 0.6
+      vqa2: 0.25
+      hateful_memes: 0.25
+      visual_entailment: 0.25
+      vizwiz: 0.25
 
 checkpoint:
   pretrained_state_mapping:
