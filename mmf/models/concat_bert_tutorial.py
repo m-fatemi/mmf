@@ -96,6 +96,8 @@ class ConcatBERTTutorial(BaseModel):
         # Similarly, image input will be in "image" key
         image = sample_list["image"]
 
+        print(f"text: {text.size()}")
+        print(f"image: {image.size()}")
         # Get the text and image features from the encoders
         text_features = self.language_module(text)[1]
         image_features = self.vision_module(image)
