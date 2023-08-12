@@ -383,8 +383,7 @@ def distributed_init(config):
             os.environ["MASTER_PORT"] = split[1]
 
         # perform a dummy all-reduce to initialize the NCCL communicator
-        dummpy_tensor = torch.zeros(1)
-        dist.all_reduce(dummpy_tensor.cuda())
+        dist.all_reduce(torch.zeros(1).cuda())
 
         suppress_output(is_main())
         config.distributed.rank = dist.get_rank()
