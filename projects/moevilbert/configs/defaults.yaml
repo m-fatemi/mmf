@@ -23,12 +23,12 @@ model_config:
           loss: cross_entropy
         checkpoint_fine_tuned: vilbert.finetuned.visual_entailment.defaults/model.pth
         freeze: true
-      # vizwiz:
-      #   classifier:
-      #     num_labels: 7371
-      #     loss: logit_bce
-      #   checkpoint_fine_tuned: vilbert.finetuned.vizwiz.defaults/model.pth
-      #   freeze: true
+      vizwiz:
+        classifier:
+          num_labels: 7371
+          loss: logit_bce
+        checkpoint_fine_tuned: vilbert.finetuned.vizwiz.defaults/model.pth
+        freeze: true
       
       hateful_memes:
         classifier:
@@ -88,7 +88,7 @@ training:
   find_unused_parameters: true
   early_stop:
     enabled: false
-    criteria: hateful_memes/accuracy
+    criteria: vizwiz/vqa_accuracy
     minimize: false
 
 multitasking:
@@ -97,9 +97,9 @@ multitasking:
   params:
     sampling_ratios:
       # vqa2: 0.25
-      hateful_memes: 0.5
-      visual_entailment: 0.5
-      # vizwiz: 0.25
+      hateful_memes: 0.3
+      visual_entailment: 0.3
+      vizwiz: 0.4
 
 checkpoint:
   pretrained_state_mapping:
