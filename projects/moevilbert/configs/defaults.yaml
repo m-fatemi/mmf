@@ -72,7 +72,6 @@ evaluation:
   metrics:
   - type: vqa_accuracy
     datasets:
-    - vqa2
     - vizwiz
   - type: accuracy
     key: accuracy
@@ -88,7 +87,7 @@ training:
   find_unused_parameters: true
   early_stop:
     enabled: false
-    criteria: vizwiz/vqa_accuracy
+    criteria: visual_entailment/accuracy
     minimize: false
 
 multitasking:
