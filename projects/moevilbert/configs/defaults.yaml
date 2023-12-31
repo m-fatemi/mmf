@@ -72,7 +72,6 @@ evaluation:
   metrics:
   - type: vqa_accuracy
     datasets:
-    - vqa2
     - vizwiz
   - type: accuracy
     key: accuracy
