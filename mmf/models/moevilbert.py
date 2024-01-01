@@ -1251,29 +1251,15 @@ class MoEViLBERT(BaseModel):
         classifier_config = deepcopy(self.config)
         classifier_config.hidden_size = self.config.bi_hidden_size
         for expert_name in self.config.experts.keys():
-            if expert_name == "vizwiz":
-                self.classifiers[expert_name] = nn.Sequential(
-                    BertPredictionHeadTransform(classifier_config),
-                    nn.Linear(
-                        classifier_config.hidden_size,
-                        self.config.experts[expert_name].classifier.num_labels
-                    ),
-                )
-                self.classifiers[expert_name].apply(self.experts[expert_name].bert._init_weights)
-            else:
-                self.classifiers[expert_name] = nn.Sequential(
-                    BertPredictionHeadTransform(classifier_config),
-                    nn.Linear(
-                        classifier_config.hidden_size,
-                        classifier_config.hidden_size,
-                    ),
-                    nn.ReLU(),
-                    nn.Linear(
-                        classifier_config.hidden_size,
-                        self.config.experts[expert_name].classifier.num_labels
-                    ),
-                )
-                self.classifiers[expert_name].apply(self.experts[expert_name].bert._init_weights)
+            self.classifiers[expert_name] = nn.Sequential(
+                BertPredictionHeadTransform(classifier_config),
+                nn.Linear(
+                    classifier_config.hidden_size,
+                    self.config.experts[expert_name].classifier.num_labels
+                ),
+            )
+            self.classifiers[expert_name].apply(self.experts[expert_name].bert._init_weights)
+            
             # self.classifiers[expert_name] = nn.Linear(
             #     self.config.bi_hidden_size,
             #     self.config.experts[expert_name].classifier.num_labels
