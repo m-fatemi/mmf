@@ -1225,9 +1225,9 @@ class MoEViLBERT(BaseModel):
 
         for expert_name in self.config.experts.keys():
             self.experts[expert_name] = ViLBERTExpert(self.config)
-            if self.config.experts[expert_name].get("freeze", False):
-                for p in self.experts[expert_name].bert.parameters():
-                    p.requires_grad = False
+            # if self.config.experts[expert_name].get("freeze", False):
+            #     for p in self.experts[expert_name].bert.parameters():
+            #         p.requires_grad = False
             
             expert_fine_tuned = self.config.experts[expert_name].get("checkpoint_fine_tuned")
             if expert_fine_tuned:
