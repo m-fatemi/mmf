@@ -1259,7 +1259,7 @@ class MoEViLBERT(BaseModel):
                     self.config.experts[expert_name].classifier.num_labels
                 ),
             )
-            self.classifiers[expert_name].apply(self.experts[expert_name].bert._init_weights)
+            self.classifiers[expert_name].apply(self.vilbertExpert.bert._init_weights)
             
             # self.classifiers[expert_name] = nn.Linear(
             #     self.config.bi_hidden_size,
