@@ -1,0 +1,105 @@
+includes:
+  - ./hateful_memes/defaults.yaml
+  - ./visual_entailment/defaults.yaml
+  - ./vqa2/train_val.yaml
+  - ./vizwiz/defaults.yaml
+
+model_config:
+  multitaskvilbert:
+    training_head_type: classification
+    freeze_base: true
+    freeze_gating_encoders: true 
+    experts:
+      # vqa2:
+      #   classifier:
+      #     num_labels: 3129
+      #     loss: logit_bce
+      #   checkpoint_fine_tuned: vilbert.finetuned.vqa2.defaults/model.pth
+      #   freeze: true
+      
+      visual_entailment:
+        classifier:
+          num_labels: 3
+          loss: cross_entropy
+        checkpoint_fine_tuned: vilbert.finetuned.visual_entailment.defaults/model.pth
+        freeze: true
+      vizwiz:
+        classifier:
+          num_labels: 7371
+          loss: logit_bce
+        checkpoint_fine_tuned: vilbert.finetuned.vizwiz.defaults/model.pth
+        freeze: true
+      
+      hateful_memes:
+        classifier:
+          num_labels: 2
+          loss: cross_entropy
+        checkpoint_fine_tuned: vilbert.finetuned.hateful_memes.defaults/model.pth
+        freeze: true
+      
+    gating_network:
+      image_encoder:
+        type: resnet152
+        params:
+          pretrained: true
+          pool_type: avg
+          num_output_features: 1
+      text_encoder:
+        type: transformer
+        params:
+          bert_model_name: bert-base-uncased
+          hidden_size: 768
+          num_hidden_layers: 12
+          num_attention_heads: 12
+          output_attentions: false
+          output_hidden_states: false
+      freeze_encoders: true
+
+optimizer:
+  # allow_unused_parameters: true
+  type: adam_w
+  params:
+    lr: 5e-5
+    eps: 1e-8
+
+scheduler:
+  type: warmup_linear
+  params:
+    num_warmup_steps: 6000
+    num_training_steps: 60000
+
+evaluation:
+  metrics:
+  - type: vqa_accuracy
+    datasets:
+    - vizwiz
+  - type: accuracy
+    key: accuracy
+    datasets:
+    - visual_entailment
+    - hateful_memes
+
+training:
+  batch_size: 128
+  lr_scheduler: true
+  # Don't forget to update schedule_attributes if you update this
+  max_updates: 60000
+  find_unused_parameters: true
+  early_stop:
+    enabled: false
+    criteria: vizwiz/vqa_accuracy
+    minimize: false
+
+multitasking:
+  enabled: true
+  type: ratios
+  params:
+    sampling_ratios:
+      # vqa2: 0.25
+      hateful_memes: 0.3
+      visual_entailment: 0.3
+      vizwiz: 0.4
+
+checkpoint:
+  pretrained_state_mapping:
+    model.bert: model.bert
