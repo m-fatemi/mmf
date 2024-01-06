@@ -1392,7 +1392,7 @@ class MoEViLBERT(BaseModel):
         #     ) for expert_name in self.experts.keys()
         # ], dim=1)
 
-        expert_output = vilbertExpert(
+        expert_output = self.vilbertExpert(
             params["input_ids"],
             params["image_feature"],
             params["image_location"],
