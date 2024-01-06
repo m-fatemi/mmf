@@ -1224,7 +1224,7 @@ class MoEViLBERT(BaseModel):
         self.experts = nn.ModuleDict()
 
         self.vilbertExpert = ViLBERTExpert(self.config)
-        for expert_name in self.config.experts.keys():
+        # for expert_name in self.config.experts.keys():
             # self.experts[expert_name] = ViLBERTExpert(self.config)
             # if self.config.experts[expert_name].get("freeze", False):
                 # for p in self.experts[expert_name].bert.parameters():
